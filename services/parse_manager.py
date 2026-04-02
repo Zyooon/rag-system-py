@@ -19,7 +19,7 @@ class ParseManager:
     def __init__(self):
         # 사용 가능한 파서들 초기화
         self.document_parsers = [
-            HierarchicalParser(max_chunk_size=settings.chunk_size, overlap=settings.chunk_overlap),
+            HierarchicalParser(),
             MarkdownParser(max_chunk_size=settings.chunk_size, overlap=settings.chunk_overlap),
             SimpleLineParser(max_chunk_size=settings.chunk_size, overlap=settings.chunk_overlap)
         ]

@@ -129,6 +129,45 @@ async def get_documents_list():
         )
 
 
+@router.post("/reprocess-contextual")
+async def reprocess_documents_contextually():
+    """저장된 문서들을 맥락별로 재분할하는 엔드포인트"""
+    try:
+        from services.contextual_redocument_service import ContextualRedocumentService
+        redocument_service = ContextualRedocumentService()
+        
+        result = await redocument_service.reprocess_all_documents()
+        
+        return RagResponse.success_response("맥락 기반 문서 재분할 완료", result)
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"문서 재분할 실패: {str(e)}"
+        )
+
+
+@router.get("/reprocess-preview/{filename}")
+async def get_reprocessing_preview(filename: str):
+    """특정 파일의 재분할 미리보기 엔드포인트"""
+    try:
+        from services.contextual_redocument_service import ContextualRedocumentService
+        redocument_service = ContextualRedocumentService()
+        
+        result = await redocument_service.get_reprocessing_preview(filename)
+        
+        if not result.get("found", False):
+            return RagResponse.error_response("파일을 찾을 수 없습니다", result)
+        
+        return RagResponse.success_response(f"'{filename}' 재분할 미리보기", result)
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"미리보기 조회 실패: {str(e)}"
+        )
+
+
 @router.delete("/documents")
 async def clear_documents():
     """문서 삭제 엔드포인트"""

@@ -86,8 +86,8 @@ class RagManagementService:
         raw_documents = await self.load_raw_documents_from_folder(folder_path)
         
         if raw_documents:
-            # 기본 설정으로 문서 분할 (파일당 10-15개 청크)
-            processed_documents = self.text_splitter_processor.split_documents(raw_documents)
+            # 맥락 기반 문서 분할 사용
+            processed_documents = await self._split_documents_contextually(raw_documents)
             
             # 벡터 저장소에 문서 추가
             try:
@@ -107,13 +107,59 @@ class RagManagementService:
             }
             
             return self.create_save_result(raw_documents, processed_documents, save_result)
+    
+    async def _split_documents_contextually(self, raw_documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        맥락 기반으로 문서 분할
         
-        return {
-            MAP_KEY_SAVED_COUNT: 0,
-            MAP_KEY_DUPLICATE_COUNT: 0,
-            MAP_KEY_TOTAL_COUNT: 0,
-            MAP_KEY_MESSAGE: MSG_NO_TEXT_FILES
-        }
+        Args:
+            raw_documents: 원본 문서 리스트
+            
+        Returns:
+            맥락 기반으로 분할된 문서 리스트
+        """
+        from parsers import HierarchicalParser
+        from datetime import datetime
+        
+        hierarchical_parser = HierarchicalParser()
+        all_processed_chunks = []
+        
+        for doc in raw_documents:
+            try:
+                # 문서 내용과 메타데이터 추출
+                content = doc.get('text', '')
+                base_metadata = doc.get('metadata', {})
+                filename = base_metadata.get('filename', 'unknown')
+                
+                if not content.strip():
+                    continue
+                
+                # 맥락 기반 파싱
+                parsed_chunks = hierarchical_parser.parse(content, base_metadata)
+                
+                if parsed_chunks:
+                    # 청크 인덱스 및 추가 메타데이터 설정
+                    for i, chunk in enumerate(parsed_chunks):
+                        chunk['metadata']['chunk_index'] = i
+                        chunk['metadata']['start_char'] = 0  # TODO: 정확한 위치 계산
+                        chunk['metadata']['end_char'] = len(chunk.get('text', ''))
+                        chunk['metadata']['chunk_length'] = len(chunk.get('text', ''))
+                        chunk['metadata']['splitter_type'] = 'contextual_hierarchical'
+                        chunk['metadata']['saved_at'] = datetime.now().isoformat()
+                    
+                    all_processed_chunks.extend(parsed_chunks)
+                    print(f"파일 '{filename}' 맥락 기반 분할: {len(parsed_chunks)}개 청크")
+                else:
+                    print(f"파일 '{filename}' 맥락 기반 분할 실패")
+                    
+            except Exception as e:
+                print(f"문서 맥락 분할 오류: {e}")
+                # 실패 시 기존 방식으로 분할
+                fallback_chunks = self.text_splitter_processor.split_documents([doc])
+                all_processed_chunks.extend(fallback_chunks)
+        
+        print(f"총 {len(raw_documents)}개 원본 문서 → {len(all_processed_chunks)}개 맥락 청크")
+        return all_processed_chunks
     
     # ==================== 벡터 저장소 관리 기능 ====================
     
