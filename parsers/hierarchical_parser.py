@@ -94,7 +94,10 @@ class HierarchicalParser(DocumentParser):
         
         # 계층적 구조나 글머리 기호가 일정 이상 있으면 처리 가능
         total_lines = len([l for l in lines if l.strip()])
-        threshold = max(2, total_lines * 0.1)  # 최소 2개 또는 10%
+        if total_lines < 5:  # 너무 짧은 문서는 처리하지 않음
+            return False
+            
+        threshold = max(3, total_lines * 0.05)  # 최소 3개 또는 5%
         
         return (hierarchical_count + bullet_count) >= threshold
     

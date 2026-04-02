@@ -125,6 +125,8 @@ class ChromaVectorStore(VectorStoreRepository):
             유사한 문서 리스트
         """
         try:
+            print(f"🔍 유사도 검색 시작: '{query}' (k={k}, threshold={threshold})")
+            
             # TODO: 실제 임베딩 모델로 쿼리 벡터화
             # query_embedding = await self.embeddings.embed_query(query)
             
@@ -132,12 +134,15 @@ class ChromaVectorStore(VectorStoreRepository):
             results = await asyncio.to_thread(
                 self.vector_store.similarity_search_with_score,
                 query,
-                k=k
+                k=k * 2  # 더 많은 결과를 가져와서 필터링
             )
+            
+            print(f"📊 ChromaDB에서 {len(results)}개 결과 반환")
             
             # 임계값 필터링
             filtered_results = []
             for doc, score in results:
+                print(f"📄 문서 점수: {score:.4f} (임계값: {threshold})")
                 if score >= threshold:
                     filtered_results.append({
                         "text": doc.page_content,
@@ -146,11 +151,11 @@ class ChromaVectorStore(VectorStoreRepository):
                         "id": str(uuid.uuid4())
                     })
             
-            print(f"유사도 검색: {query} -> {len(filtered_results)}개 결과")
+            print(f"✅ 최종 {len(filtered_results)}개 문서 통과 (임계값 {threshold} 이상)")
             return filtered_results
             
         except Exception as e:
-            print(f"유사도 검색 실패: {e}")
+            print(f"❌ 유사도 검색 실패: {e}")
             return []
     
     async def clear(self) -> bool:

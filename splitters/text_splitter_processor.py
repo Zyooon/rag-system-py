@@ -56,24 +56,25 @@ class TextSplitterProcessor:
             text = raw_doc.get("text", "")
             filename = raw_doc.get("metadata", {}).get("filename", "")
             
-            # 1. 먼저 ParseManager로 파싱
+            # ParseManager로 파싱 (HierarchicalParser가 최적의 분할을 수행)
             parsed_docs = parse_manager.parse_document(text, filename)
             
             if not parsed_docs:
-                # 파싱 실패시 원본 텍스트를 그대로 사용
-                parsed_docs = [raw_doc]
+                # 파싱 실패시 원본 텍스트를 기본 청크로 사용
+                fallback_doc = {
+                    "text": text,
+                    "metadata": {
+                        **raw_doc.get("metadata", {}),
+                        "parser": "Fallback",
+                        "chunk_index": 0
+                    }
+                }
+                processed_documents.append(fallback_doc)
                 print(f"파싱 실패: {filename} - 원본 텍스트 사용")
             else:
+                # 파싱된 문서들은 이미 최적의 크기로 분할되어 있으므로 그대로 사용
+                processed_documents.extend(parsed_docs)
                 print(f"ParseManager 파싱 완료: {filename} -> {len(parsed_docs)}개 조각")
-            
-            # 2. 파싱된 문서들을 청크로 분할
-            for parsed_doc in parsed_docs:
-                parsed_text = parsed_doc.get("text", "")
-                parsed_metadata = parsed_doc.get("metadata", {})
-                
-                if parsed_text.strip():
-                    chunks = self.split_text(parsed_text, parsed_metadata)
-                    processed_documents.extend(chunks)
         
         print(f"총 {len(processed_documents)}개 최종 청크 생성")
         return processed_documents

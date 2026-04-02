@@ -27,6 +27,8 @@ class EmbeddingService(Embeddings):
             # Ollama 서버 연결 테스트
             import httpx
             
+            print(f"Ollama 서버 연결 시도: {self.base_url}")
+            
             # 서버 상태 확인
             response = httpx.get(f"{self.base_url}/api/tags", timeout=5.0)
             if response.status_code != 200:
@@ -35,6 +37,8 @@ class EmbeddingService(Embeddings):
             # 모델 목록에서 해당 모델 확인
             models_data = response.json()
             available_models = [model.get('name', '') for model in models_data.get('models', [])]
+            
+            print(f"사용 가능한 모델: {available_models}")
             
             if self.embedding_model not in available_models:
                 print(f"경고: Ollama에 '{self.embedding_model}' 모델이 없습니다.")
@@ -54,11 +58,12 @@ class EmbeddingService(Embeddings):
             if not test_vector or all(v == 0 for v in test_vector):
                 raise Exception("임베딩 결과가 유효하지 않음")
             
-            print(f"Ollama 임베딩 모델 초기화 완료: {self.embedding_model} ({self.base_url})")
+            print(f"✅ Ollama 임베딩 모델 초기화 완료: {self.embedding_model}")
             print(f"벡터 차원: {len(test_vector)}")
+            print(f"테스트 벡터 샘플: {test_vector[:3]}...")
             
         except Exception as e:
-            print(f"Ollama 임베딩 모델 초기화 실패: {e}")
+            print(f"❌ Ollama 임베딩 모델 초기화 실패: {e}")
             print("해결 방안:")
             print(f"1. Ollama 서버가 실행 중인지 확인: {self.base_url}")
             print(f"2. 모델 설치: ollama pull {self.embedding_model}")

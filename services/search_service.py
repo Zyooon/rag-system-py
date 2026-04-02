@@ -31,7 +31,7 @@ class SearchService:
         self._initialize_llm_service()
         
         self.similarity_threshold = settings.search_threshold
-        self.max_search_results = settings.search_max_results
+        self.max_search_results = settings.search_max_results * 2  # 검색 범위 확대
     
     def _initialize_llm_service(self):
         """LLM 서비스 초기화 (순환 임포트 방지)"""
@@ -62,7 +62,7 @@ class SearchService:
         if not relevant_documents:
             return {
                 MAP_KEY_ANSWER: MSG_NO_KNOWLEDGE_BASE,
-                MAP_KEY_SOURCES: SourceInfo()
+                MAP_KEY_SOURCES: SourceInfo(filename="unknown", content="", similarity_score=0.0)
             }
         
         # 유사도 필터링 및 정렬
@@ -71,7 +71,7 @@ class SearchService:
         if not filtered_docs:
             return {
                 MAP_KEY_ANSWER: MSG_NO_RELEVANT_INFO,
-                MAP_KEY_SOURCES: SourceInfo()
+                MAP_KEY_SOURCES: SourceInfo(filename="unknown", content="", similarity_score=0.0)
             }
         
         # 출처 정보 추출
@@ -83,7 +83,7 @@ class SearchService:
         if not context.strip():
             return {
                 MAP_KEY_ANSWER: MSG_NO_RELEVANT_INFO_FOUND,
-                MAP_KEY_SOURCES: SourceInfo()
+                MAP_KEY_SOURCES: SourceInfo(filename="unknown", content="", similarity_score=0.0)
             }
         
         # 프롬프트 생성 및 LLM 호출
@@ -93,7 +93,7 @@ class SearchService:
             if self.llm_service is None:
                 return {
                     MAP_KEY_ANSWER: "LLM 서비스가 초기화되지 않았습니다",
-                    MAP_KEY_SOURCES: SourceInfo()
+                    MAP_KEY_SOURCES: SourceInfo(filename="unknown", content="", similarity_score=0.0)
                 }
             
             answer = await self.llm_service.generate_answer(prompt)
@@ -104,7 +104,7 @@ class SearchService:
                 MAP_KEY_SOURCES: best_source
             }
         except Exception as e:
-            best_source = sources[0] if sources else SourceInfo()
+            best_source = sources[0] if sources else SourceInfo(filename="unknown", content="", similarity_score=0.0)
             return {
                 MAP_KEY_ANSWER: MSG_AI_ANSWER_ERROR + str(e),
                 MAP_KEY_SOURCES: best_source
@@ -194,7 +194,7 @@ class SearchService:
         Returns:
             출처 정보
         """
-        source_info = SourceInfo(filename="unknown", content_preview="", similarity_score=0.0)
+        source_info = SourceInfo(filename="unknown", content="", similarity_score=0.0)
         
         try:
             # Redis에서 모든 문서 가져오기
@@ -212,8 +212,9 @@ class SearchService:
                     metadata = doc.get("metadata", {})
                     actual_name = metadata.get("filename", "unknown")
                     
-                    source_info.filename = actual_name
-                    source_info.content_preview = chunk_content[:200] + "..." if len(chunk_content) > 200 else chunk_content
+                    # from_document 메서드를 사용하여 SourceInfo 생성
+                    source_info = SourceInfo.from_document(doc)
+                    source_info.content = chunk_content[:200] + "..." if len(chunk_content) > 200 else chunk_content
                     return source_info
         
         except Exception as e:
@@ -231,14 +232,7 @@ class SearchService:
         Returns:
             출처 정보
         """
-        metadata = doc.get("metadata", {})
-        content = doc.get("text", "")
-        
-        return SourceInfo(
-            filename=metadata.get("filename", "unknown"),
-            content_preview=content[:200] + "..." if len(content) > 200 else content,
-            similarity_score=doc.get("similarity_score", 0.0)
-        )
+        return SourceInfo.from_document(doc)
     
     def _build_context_with_indices(self, documents: List[Dict[str, Any]]) -> str:
         """
@@ -318,7 +312,7 @@ class SearchService:
         matches = pattern.findall(answer)
         ref_numbers = set(int(num) for num in matches)
         
-        best_source = SourceInfo(filename="unknown", content_preview="", similarity_score=0.0)
+        best_source = SourceInfo(filename="unknown", content="", similarity_score=0.0)
         
         # sources 리스트가 비어있으면 첫 번째 documents에서 SourceInfo 생성
         if not sources:

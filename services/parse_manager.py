@@ -53,16 +53,24 @@ class ParseManager:
         # 사용 가능한 파서들을 우선순위 순서로 정렬
         sorted_parsers = self._get_sorted_parsers()
         
+        print(f"사용 가능한 파서: {[p.get_parser_name() for p in sorted_parsers]}")
+        
         # 각 파서를 시도하여 최상의 결과 선택
         for parser in sorted_parsers:
             try:
-                result = parser.parse(content, base_metadata)
+                can_handle = parser.can_handle(content)
+                print(f"{parser.get_parser_name()} can_handle: {can_handle}")
                 
-                if self._is_good_parsing_result(result, content):
-                    print(f"{parser.get_parser_name()} 선택됨: {filename} -> {len(result)}개 청크")
-                    return result
-                
-                print(f"{parser.get_parser_name()} 파싱 결과 부적합: {len(result)}개 청크")
+                if can_handle:
+                    result = parser.parse(content, base_metadata)
+                    
+                    if self._is_good_parsing_result(result, content):
+                        print(f"{parser.get_parser_name()} 선택됨: {filename} -> {len(result)}개 청크")
+                        return result
+                    
+                    print(f"{parser.get_parser_name()} 파싱 결과 부적합: {len(result)}개 청크")
+                else:
+                    print(f"{parser.get_parser_name()} 처리 불가: {filename}")
                 
             except Exception as e:
                 print(f"{parser.get_parser_name()} 파싱 실패: {e}")
@@ -151,21 +159,26 @@ class ParseManager:
             return False
         
         # 1. 최소 청크 수 확인 (너무 적게 나뉘면 안 좋음)
-        if len(documents) < 2:
+        if len(documents) < 1:
             return False
         
-        # 2. 파싱된 내용의 총 길이가 원본의 50% 이상인지 확인
+        # 2. 파싱된 내용의 총 길이가 원본의 70% 이상인지 확인 (HierarchicalParser는 더 높은 커버리지 필요)
         total_parsed_length = sum(len(doc.get("text", "")) for doc in documents)
         
         coverage_ratio = total_parsed_length / len(original_content)
-        if coverage_ratio < 0.5:
+        if coverage_ratio < 0.7:
             print(f"파싱 커버리지 낮음: {int(coverage_ratio * 100)}%")
             return False
         
         # 3. 각 청크의 평균 길이가 적절한지 확인 (너무 짧으면 안 좋음)
         avg_chunk_length = total_parsed_length / len(documents)
-        if avg_chunk_length < 20:
+        if avg_chunk_length < 50 and len(documents) > 1:  # 여러 청크일 때만 평균 길이 체크
             print(f"청크 평균 길이 너무 짧음: {int(avg_chunk_length)}자")
+            return False
+        
+        # 4. 청크가 너무 많이 나뉘었는지 확인 (과도한 분할 방지)
+        if len(documents) > 50:
+            print(f"청크 수 너무 많음: {len(documents)}개")
             return False
         
         return True

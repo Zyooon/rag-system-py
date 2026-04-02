@@ -32,6 +32,7 @@ async def root():
             "search": "/api/search",
             "rag_status": "/api/rag/",
             "search_query": "/api/search/",
+            "embedding_health": "/api/search/health",
             "documents_list": "/api/search/documents",
             "load_documents": "/api/rag/documents",
             "reload_documents": "/api/rag/documents/reload",
