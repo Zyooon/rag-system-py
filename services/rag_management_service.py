@@ -10,7 +10,7 @@ from pathlib import Path
 
 from services import FileManager, ParseManager
 from splitters import TextSplitterProcessor
-from repositories import RedisDocumentRepository
+from repositories import RedisDocumentRepository, ChromaVectorStore
 from config import settings
 from constants import (
     MAP_KEY_SAVED_COUNT, MAP_KEY_DUPLICATE_COUNT, MAP_KEY_TOTAL_COUNT, MAP_KEY_DOCUMENT_COUNT,
@@ -35,6 +35,7 @@ class RagManagementService:
         self.parse_manager = ParseManager()
         self.text_splitter_processor = TextSplitterProcessor()
         self.redis_document_repository = RedisDocumentRepository()
+        self.vector_store = ChromaVectorStore()
         self.is_initialized = False
     
     # ==================== 문서 처리 기능 ====================
@@ -78,11 +79,10 @@ class RagManagementService:
             # TextSplitterProcessor를 통한 긴 문서 분할
             split_documents = self.text_splitter_processor.split_documents(all_documents)
             
-            # TODO: 실제 벡터 저장소 저장 로직 구현
-            # vector_store.add(split_documents)
+            # 벡터 저장소에 문서 추가
             try:
-                print(f"벡터 저장소에 {len(split_documents)}개 문서 저장 시도")
-                # 임시 성공 가정
+                vector_success = await self.vector_store.add_documents(split_documents)
+                print(f"벡터 저장소에 {len(split_documents)}개 문서 저장 성공: {vector_success}")
             except Exception as e:
                 print(f"벡터 저장소 저장 실패: {e}")
             
@@ -110,17 +110,24 @@ class RagManagementService:
     async def clear_store(self) -> Dict[str, Any]:
         """벡터 저장소 초기화"""
         result = {}
-        total_deleted = 0
-        
         try:
             self.is_initialized = False
             
-            # TODO: 실제 벡터 저장소 정리 로직 구현
-            # 1. VectorStore 데이터 정리
-            # 2. RedisTemplate을 통해 안전하게 키 삭제
+            # 1. 벡터 저장소 정리
+            try:
+                vector_clear_success = await self.vector_store.clear()
+                print(f"벡터 저장소 정리 성공: {vector_clear_success}")
+            except Exception as e:
+                print(f"벡터 저장소 정리 실패: {e}")
+                vector_clear_success = False
             
+            # 2. Redis 키 패턴 삭제
             key_patterns = self.redis_document_repository.get_key_patterns()
             delete_results = await self.redis_document_repository.delete_keys_by_patterns(key_patterns)
+            
+            rag_deleted = delete_results.get(self.redis_document_repository.get_full_key_pattern(), 0)
+            embedding_deleted = delete_results.get(self.redis_document_repository.get_embedding_key_pattern(), 0)
+            total_deleted = rag_deleted + embedding_deleted
             
             print(f"벡터 저장소 초기화 완료: 총 {total_deleted}개 키 삭제됨")
             
