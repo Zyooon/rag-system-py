@@ -112,7 +112,7 @@ class ChromaVectorStore(VectorStoreRepository):
             print(f"문서 추가 실패: {e}")
             return False
     
-    async def similarity_search(self, query: str, k: int = 5, threshold: float = 0.7) -> List[Dict[str, Any]]:
+    async def similarity_search(self, query: str, k: int = 5, threshold: float = 0.3) -> List[Dict[str, Any]]:
         """
         유사도 기반 검색
         

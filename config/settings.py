@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     chroma_collection_name: str = Field(default="rag_collection", env="CHROMA_COLLECTION_NAME")
     
     # 검색 설정
-    search_threshold: float = Field(default=0.7, env="SEARCH_THRESHOLD")
+    search_threshold: float = Field(default=0.3, env="SEARCH_THRESHOLD")
     search_max_results: int = Field(default=5, env="SEARCH_MAX_RESULTS")
     search_top_k: int = Field(default=10, env="SEARCH_TOP_K")
     

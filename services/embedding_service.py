@@ -24,13 +24,45 @@ class EmbeddingService(Embeddings):
     def _initialize_model(self):
         """Ollama 임베딩 모델 초기화"""
         try:
+            # Ollama 서버 연결 테스트
+            import httpx
+            
+            # 서버 상태 확인
+            response = httpx.get(f"{self.base_url}/api/tags", timeout=5.0)
+            if response.status_code != 200:
+                raise Exception(f"Ollama 서버 응답 오류: {response.status_code}")
+            
+            # 모델 목록에서 해당 모델 확인
+            models_data = response.json()
+            available_models = [model.get('name', '') for model in models_data.get('models', [])]
+            
+            if self.embedding_model not in available_models:
+                print(f"경고: Ollama에 '{self.embedding_model}' 모델이 없습니다.")
+                print(f"사용 가능한 모델: {', '.join(available_models)}")
+                print(f"'ollama pull {self.embedding_model}' 명령어로 모델을 설치하세요.")
+                self.embeddings = None
+                return
+            
+            # 임베딩 모델 초기화
             self.embeddings = OllamaEmbeddings(
                 base_url=self.base_url,
                 model=self.embedding_model
             )
+            
+            # 실제 임베딩 테스트
+            test_vector = self.embeddings.embed_query("test")
+            if not test_vector or all(v == 0 for v in test_vector):
+                raise Exception("임베딩 결과가 유효하지 않음")
+            
             print(f"Ollama 임베딩 모델 초기화 완료: {self.embedding_model} ({self.base_url})")
+            print(f"벡터 차원: {len(test_vector)}")
+            
         except Exception as e:
             print(f"Ollama 임베딩 모델 초기화 실패: {e}")
+            print("해결 방안:")
+            print(f"1. Ollama 서버가 실행 중인지 확인: {self.base_url}")
+            print(f"2. 모델 설치: ollama pull {self.embedding_model}")
+            print("3. 네트워크 연결 확인")
             self.embeddings = None
     
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -44,9 +76,12 @@ class EmbeddingService(Embeddings):
             벡터 리스트
         """
         if not self.embeddings:
-            # 임시로 더미 벡터 반환 (실제로는 오류 처리 필요)
-            print("경고: 임베딩 모델이 초기화되지 않아 더미 벡터를 반환합니다")
-            return [[0.0] * 768 for _ in texts]  # 768차원 더미 벡터
+            # 더미 벡터 대신 예외 발생
+            raise Exception(
+                f"임베딩 모델 '{self.embedding_model}'을 사용할 수 없습니다.\n"
+                f"Ollama 서버: {self.base_url}\n"
+                f"해결 방안: 'ollama pull {self.embedding_model}' 실행"
+            )
         
         try:
             # 비동기 호출을 위해 asyncio.to_thread 사용
@@ -57,8 +92,7 @@ class EmbeddingService(Embeddings):
             return vectors
         except Exception as e:
             print(f"문서 임베딩 실패: {e}")
-            # 오류 시 더미 벡터 반환
-            return [[0.0] * 768 for _ in texts]
+            raise Exception(f"임베딩 처리 중 오류 발생: {e}")
     
     async def embed_query(self, text: str) -> List[float]:
         """
@@ -71,8 +105,12 @@ class EmbeddingService(Embeddings):
             벡터
         """
         if not self.embeddings:
-            print("경고: 임베딩 모델이 초기화되지 않아 더미 벡터를 반환합니다")
-            return [0.0] * 768  # 768차원 더미 벡터
+            # 더미 벡터 대신 예외 발생
+            raise Exception(
+                f"임베딩 모델 '{self.embedding_model}'을 사용할 수 없습니다.\n"
+                f"Ollama 서버: {self.base_url}\n"
+                f"해결 방안: 'ollama pull {self.embedding_model}' 실행"
+            )
         
         try:
             # 비동기 호출
@@ -83,8 +121,7 @@ class EmbeddingService(Embeddings):
             return vector
         except Exception as e:
             print(f"쿼리 임베딩 실패: {e}")
-            # 오류 시 더미 벡터 반환
-            return [0.0] * 768
+            raise Exception(f"쿼리 임베딩 처리 중 오류 발생: {e}")
     
     async def health_check(self) -> Dict[str, Any]:
         """
