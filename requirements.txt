@@ -1,10 +1,45 @@
-fastapi
-uvicorn
-langchain
-langchain-openai
-langchain-ollama
-langchain-chroma
-langchain-text-splitters
-chromadb
-python-dotenv
-pypdf
+# FastAPI 및 웹 서버
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# LangChain 핵심
+langchain>=0.1.0
+langchain-community>=0.0.20
+langchain-core>=0.1.0
+
+# LLM 및 임베딩
+langchain-openai>=0.0.5
+langchain-ollama>=0.1.0
+
+# 벡터 저장소
+langchain-chroma>=0.1.0
+chromadb>=0.4.0
+
+# 텍스트 처리
+langchain-text-splitters>=0.0.1
+
+# Redis 지원
+redis>=5.0.0
+langchain-redis>=0.0.1
+
+# 문서 처리
+pypdf>=3.17.0
+python-docx>=1.1.0
+python-multipart>=0.0.6
+
+# 환경 설정
+python-dotenv>=1.0.0
+
+# 데이터 처리
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# 로깅 및 유틸리티
+loguru>=0.7.0
+
+# 비동기 처리
+aiofiles>=23.2.0
+
+# 테스트 (선택사항)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
