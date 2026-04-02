@@ -82,30 +82,33 @@ class RagManagementService:
                 MAP_KEY_MESSAGE: MSG_FOLDER_NOT_EXISTS
             }
         
-        all_documents = await self.load_documents_from_folder_simple(folder_path)
+        # 순수 텍스트 파일만 가져오기 (파싱 없음)
+        raw_documents = await self.load_raw_documents_from_folder(folder_path)
         
-        if all_documents:
-            # TextSplitterProcessor를 통한 긴 문서 분할
-            split_documents = self.text_splitter_processor.split_documents(all_documents)
+        if raw_documents:
+            # TextSplitterProcessor를 통한 일관된 문서 분할 및 파싱
+            processed_documents = self.text_splitter_processor.split_and_parse_documents(
+                raw_documents, self.parse_manager
+            )
             
             # 벡터 저장소에 문서 추가
             try:
-                vector_success = await self.vector_store.add_documents(split_documents)
-                print(f"벡터 저장소에 {len(split_documents)}개 문서 저장 성공: {vector_success}")
+                vector_success = await self.vector_store.add_documents(processed_documents)
+                print(f"벡터 저장소에 {len(processed_documents)}개 문서 저장 성공: {vector_success}")
             except Exception as e:
                 print(f"벡터 저장소 저장 실패: {e}")
             
             # RedisDocumentRepository를 통한 문서 저장
-            save_result = await self.redis_document_repository.save_documents(split_documents)
+            save_result = await self.redis_document_repository.save_documents(processed_documents)
             
             # 임시 구현
             save_result = {
-                MAP_KEY_SAVED_COUNT: len(all_documents),
+                MAP_KEY_SAVED_COUNT: len(raw_documents),
                 MAP_KEY_DUPLICATE_COUNT: 0,
-                MAP_KEY_DOCUMENT_COUNT: len(all_documents)
+                MAP_KEY_DOCUMENT_COUNT: len(processed_documents)
             }
             
-            return self.create_save_result(all_documents, all_documents, save_result)
+            return self.create_save_result(raw_documents, processed_documents, save_result)
         
         return {
             MAP_KEY_SAVED_COUNT: 0,
@@ -214,9 +217,8 @@ class RagManagementService:
         try:
             print("=== Redis 벡터 저장소 상태 확인 ===")
             
-            # TODO: 실제 Redis 키 조회 로직 구현
-            # redis_keys = redis_document_repository.getAllDocumentKeys()
-            redis_keys = []  # 임시 구현
+            # Redis에서 실제 키 조회
+            redis_keys = await self.redis_document_repository.get_all_document_keys()
             document_count = len(redis_keys)
             
             if document_count > 0:
@@ -288,6 +290,32 @@ class RagManagementService:
             MAP_KEY_DOCUMENT_COUNT: len(split_docs),
             MAP_KEY_MESSAGE: "문서 저장 완료"
         }
+    
+    async def load_raw_documents_from_folder(self, folder_path: str) -> List[Dict[str, Any]]:
+        """폴더에서 순수 텍스트 문서만 가져오기 (파싱 없음)"""
+        raw_documents = []
+        folder = Path(folder_path)
+        
+        file_contents = await self.file_manager.read_all_supported_files(folder)
+        
+        for file_content in file_contents:
+            try:
+                # 순수 텍스트와 기본 메타데이터만 저장
+                document = {
+                    "text": file_content.content,
+                    "metadata": {
+                        METADATA_KEY_FILENAME: file_content.filename,
+                        METADATA_KEY_FILEPATH: str(file_content.file_path),
+                        METADATA_KEY_SAVED_AT: file_content.metadata.get(METADATA_KEY_SAVED_AT, "")
+                    }
+                }
+                raw_documents.append(document)
+                print(f"원본 텍스트 로드: {file_content.filename} (길이: {len(file_content.content)})")
+            
+            except Exception as e:
+                print(f"원본 텍스트 로드 실패: {file_content.filename} - {e}")
+        
+        return raw_documents
     
     async def load_documents_from_folder_simple(self, folder_path: str) -> List[Dict[str, Any]]:
         """단순 문서 로드"""

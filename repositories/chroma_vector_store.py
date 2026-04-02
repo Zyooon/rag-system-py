@@ -38,10 +38,16 @@ class ChromaVectorStore(VectorStoreRepository):
             # 임베딩 서비스가 없으면 더미 함수 사용
             if self.embedding_service is None:
                 # 더미 임베딩 함수
-                def dummy_embedding(texts):
-                    if isinstance(texts, str):
-                        return [0.0] * 768
-                    return [[0.0] * 768 for _ in texts]
+                def dummy_embedding(*args, **kwargs):
+                    # 첫 번째 인자가 텍스트 리스트
+                    if args:
+                        texts = args[0]
+                        if isinstance(texts, str):
+                            return [0.0] * 768
+                        elif isinstance(texts, list):
+                            return [[0.0] * 768 for _ in texts]
+                    # 기본값: 빈 리스트에 대한 더미 임베딩
+                    return [[0.0] * 768]
                 
                 embedding_function = type('DummyEmbedding', (), {
                     'embed_documents': dummy_embedding,

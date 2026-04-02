@@ -39,6 +39,45 @@ class TextSplitterProcessor:
         
         return all_chunks
     
+    def split_and_parse_documents(self, raw_documents: List[Dict[str, Any]], parse_manager) -> List[Dict[str, Any]]:
+        """
+        원본 문서를 분할하고 파싱하는 통합 메서드
+        
+        Args:
+            raw_documents: 원본 문서 리스트 (파싱되지 않은 순수 텍스트)
+            parse_manager: 파싱 매니저 인스턴스
+            
+        Returns:
+            분할 및 파싱된 문서 리스트
+        """
+        processed_documents = []
+        
+        for raw_doc in raw_documents:
+            text = raw_doc.get("text", "")
+            filename = raw_doc.get("metadata", {}).get("filename", "")
+            
+            # 1. 먼저 ParseManager로 파싱
+            parsed_docs = parse_manager.parse_document(text, filename)
+            
+            if not parsed_docs:
+                # 파싱 실패시 원본 텍스트를 그대로 사용
+                parsed_docs = [raw_doc]
+                print(f"파싱 실패: {filename} - 원본 텍스트 사용")
+            else:
+                print(f"ParseManager 파싱 완료: {filename} -> {len(parsed_docs)}개 조각")
+            
+            # 2. 파싱된 문서들을 청크로 분할
+            for parsed_doc in parsed_docs:
+                parsed_text = parsed_doc.get("text", "")
+                parsed_metadata = parsed_doc.get("metadata", {})
+                
+                if parsed_text.strip():
+                    chunks = self.split_text(parsed_text, parsed_metadata)
+                    processed_documents.extend(chunks)
+        
+        print(f"총 {len(processed_documents)}개 최종 청크 생성")
+        return processed_documents
+    
     def split_text(self, text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         텍스트를 청크로 분할
