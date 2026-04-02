@@ -38,7 +38,18 @@ class RAGAPITester:
         try:
             response = await self.client.get(f"{self.base_url}/api/rag/")
             print(f"상태: {response.status_code}")
-            print(f"응답: {response.json()}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print(f"성공: {data.get('success', False)}")
+                print(f"메시지: {data.get('message', '')}")
+                if data.get('data'):
+                    print(f"초기화 상태: {data['data'].get('is_initialized', 'Unknown')}")
+                    print(f"로드된 파일: {data['data'].get('loaded_files', [])}")
+                    print(f"문서 수: {data['data'].get('document_count', 0)}")
+            else:
+                print(f"오류: {response.text}")
+            
             return response.status_code == 200
         except Exception as e:
             print(f"RAG 상태 조회 실패: {e}")

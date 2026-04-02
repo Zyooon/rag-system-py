@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
 
 from dto import RagResponse
+from services import RagManagementService
 from constants import (
     MAP_KEY_MESSAGE, MAP_KEY_IS_INITIALIZED, MAP_KEY_LOADED_FILES,
     MAP_KEY_DOCUMENT_COUNT, MAP_KEY_TOTAL_COUNT, MAP_KEY_REDIS_CONNECTION,
@@ -27,14 +28,12 @@ class RagController:
     """RAG 시스템 관리 컨트롤러"""
     
     def __init__(self):
-        # TODO: 실제 서비스 의존성 주입 필요
-        self.rag_management_service = None
-        self.is_initialized = False
+        self.rag_management_service = RagManagementService()
     
     async def get_status(self) -> Dict[str, Any]:
         """RAG 시스템 상태 조회"""
         try:
-            status = await self._get_status_with_files()
+            status = await self.rag_management_service.get_status_with_files()
             status[MAP_KEY_REDIS_CONNECTION] = REDIS_CONNECTION_CONNECTED
             status[MAP_KEY_VECTOR_STORE_TYPE] = VECTORSTORE_TYPE_SIMPLE_REDIS_BACKUP
             
@@ -48,8 +47,7 @@ class RagController:
     async def clear_redis_vector_store(self) -> Dict[str, Any]:
         """Redis 벡터 저장소 초기화"""
         try:
-            # TODO: 실제 벡터 저장소 정리 로직 구현
-            result = await self._clear_store()
+            result = await self.rag_management_service.clear_store()
             
             message = MSG_REDIS_VECTORSTORE_DELETE_COMPLETE.format(
                 result.get(MAP_KEY_TOTAL_DELETED, 0),
@@ -67,8 +65,7 @@ class RagController:
     async def build_redis_vector_store(self) -> Dict[str, Any]:
         """Redis 벡터 저장소 구축"""
         try:
-            # TODO: 실제 문서 저장 로직 구현
-            result = await self._save_documents_to_redis()
+            result = await self.rag_management_service.save_documents_to_redis()
             message = result.get(MAP_KEY_MESSAGE, "문서 저장 완료")
             
             return result
@@ -82,8 +79,8 @@ class RagController:
         """문서 다시 로드"""
         try:
             # 벡터 저장소 초기화 후 다시 로드
-            clear_result = await self._clear_store()
-            await self._initialize_documents()
+            clear_result = await self.rag_management_service.clear_store()
+            await self.rag_management_service.initialize_documents()
             
             message = MSG_DOCUMENTS_RELOADED.format(
                 clear_result.get(MAP_KEY_TOTAL_DELETED, 0)
@@ -95,38 +92,6 @@ class RagController:
                 status_code=400,
                 detail=MSG_DOCUMENT_RELOAD_FAILED + str(e)
             )
-    
-    # TODO: 실제 서비스 메서드들 구현
-    async def _get_status_with_files(self) -> Dict[str, Any]:
-        """시스템 상태 정보 반환"""
-        return {
-            MAP_KEY_IS_INITIALIZED: self.is_initialized,
-            MAP_KEY_LOADED_FILES: [],
-            MAP_KEY_DOCUMENT_COUNT: 0,
-            MAP_KEY_TOTAL_COUNT: 0
-        }
-    
-    async def _clear_store(self) -> Dict[str, Any]:
-        """벡터 저장소 초기화"""
-        return {
-            MAP_KEY_TOTAL_DELETED: 0,
-            MAP_KEY_RAG_KEYS_DELETED: 0,
-            MAP_KEY_EMBEDDING_KEYS_DELETED: 0
-        }
-    
-    async def _save_documents_to_redis(self) -> Dict[str, Any]:
-        """문서를 Redis에 저장"""
-        return {
-            MAP_KEY_SAVED_COUNT: 0,
-            MAP_KEY_DUPLICATE_COUNT: 0,
-            MAP_KEY_TOTAL_COUNT: 0,
-            MAP_KEY_DOCUMENT_COUNT: 0,
-            MAP_KEY_MESSAGE: "문서 저장 완료"
-        }
-    
-    async def _initialize_documents(self) -> None:
-        """문서 초기화"""
-        self.is_initialized = True
 
 
 # 컨트롤러 인스턴스
