@@ -26,8 +26,7 @@ class EmbeddingService(Embeddings):
         try:
             self.embeddings = OllamaEmbeddings(
                 base_url=self.base_url,
-                model=self.embedding_model,
-                timeout=30  # 타임아웃 설정
+                model=self.embedding_model
             )
             print(f"Ollama 임베딩 모델 초기화 완료: {self.embedding_model} ({self.base_url})")
         except Exception as e:

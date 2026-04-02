@@ -11,7 +11,6 @@ from collections import defaultdict
 from repositories import ChromaVectorStore, RedisDocumentRepository
 from dto import SourceInfo
 from prompts import PromptTemplate
-from services import LLMService
 from config import settings
 from constants import (
     MAP_KEY_ANSWER, MAP_KEY_SOURCES, METADATA_KEY_FILENAME, 
@@ -26,9 +25,22 @@ class SearchService:
     def __init__(self):
         self.vector_store = ChromaVectorStore()
         self.redis_document_repository = RedisDocumentRepository()
-        self.llm_service = LLMService()
+        self.llm_service = None
+        
+        # LLM 서비스 초기화 (순환 임포트 방지)
+        self._initialize_llm_service()
+        
         self.similarity_threshold = settings.search_threshold
         self.max_search_results = settings.search_max_results
+    
+    def _initialize_llm_service(self):
+        """LLM 서비스 초기화 (순환 임포트 방지)"""
+        try:
+            from services import LLMService
+            self.llm_service = LLMService()
+        except ImportError:
+            print("LLM 서비스를 초기화할 수 없습니다")
+            self.llm_service = None
     
     async def search_and_answer_with_sources(self, query: str) -> Dict[str, Any]:
         """
@@ -78,6 +90,12 @@ class SearchService:
         prompt = PromptTemplate.create_search_with_sources_prompt(context, query)
         
         try:
+            if self.llm_service is None:
+                return {
+                    MAP_KEY_ANSWER: "LLM 서비스가 초기화되지 않았습니다",
+                    MAP_KEY_SOURCES: SourceInfo()
+                }
+            
             answer = await self.llm_service.generate_answer(prompt)
             best_source = self._find_best_matching_source(answer, filtered_docs, sources)
             
@@ -278,6 +296,9 @@ class SearchService:
         Returns:
             LLM 응답
         """
+        if self.llm_service is None:
+            return "LLM 서비스가 초기화되지 않았습니다"
+        
         return await self.llm_service.generate_answer(prompt)
     
     def _find_best_matching_source(self, answer: str, documents: List[Dict[str, Any]], sources: List[SourceInfo]) -> SourceInfo:

@@ -7,7 +7,12 @@ import json
 import asyncio
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
-import redis.asyncio as redis
+
+try:
+    import redis.asyncio as redis
+except ImportError:
+    print("Redis 패키지가 설치되지 않았습니다. 'pip install redis'를 실행하세요")
+    redis = None
 
 from config import settings
 
@@ -19,13 +24,22 @@ class RedisDocumentRepository:
         self.redis_url = settings.redis_url
         self.rag_key_prefix = settings.redis_rag_key_prefix
         self.embedding_key_prefix = settings.redis_embedding_key_prefix
-        self.redis_client: Optional[redis.Redis] = None
-        
-        # Redis 클라이언트 초기화
-        asyncio.create_task(self._initialize_redis())
+        self.redis_client: Optional[Any] = None
+        self._initialized = False
+    
+    async def _ensure_initialized(self):
+        """Redis 클라이언트 초기화 보장"""
+        if not self._initialized:
+            await self._initialize_redis()
+            self._initialized = True
     
     async def _initialize_redis(self):
         """Redis 클라이언트 초기화"""
+        if redis is None:
+            print("Redis 패키지가 설치되지 않았습니다")
+            self.redis_client = None
+            return
+            
         try:
             self.redis_client = redis.from_url(
                 self.redis_url,
@@ -51,6 +65,8 @@ class RedisDocumentRepository:
         Returns:
             저장 결과 통계
         """
+        await self._ensure_initialized()
+        
         if not self.redis_client:
             print("Redis 클라이언트가 초기화되지 않았습니다")
             return {
@@ -114,6 +130,8 @@ class RedisDocumentRepository:
         Returns:
             문서 키 리스트
         """
+        await self._ensure_initialized()
+        
         if not self.redis_client:
             print("Redis 클라이언트가 초기화되지 않았습니다")
             return []
@@ -137,6 +155,8 @@ class RedisDocumentRepository:
         Returns:
             문서 데이터 또는 None
         """
+        await self._ensure_initialized()
+        
         if not self.redis_client:
             return None
         
@@ -175,6 +195,8 @@ class RedisDocumentRepository:
         Returns:
             삭제된 키 수 통계
         """
+        await self._ensure_initialized()
+        
         if not self.redis_client:
             print("Redis 클라이언트가 초기화되지 않았습니다")
             return {}

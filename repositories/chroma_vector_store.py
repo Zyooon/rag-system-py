@@ -11,7 +11,6 @@ from datetime import datetime
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from services import EmbeddingService
 from config import settings
 from .vector_store_repository import VectorStoreRepository
 
@@ -22,19 +21,40 @@ class ChromaVectorStore(VectorStoreRepository):
     def __init__(self):
         self.collection_name = settings.chroma_collection_name
         self.persist_directory = settings.chroma_path
-        self.embedding_service = EmbeddingService()
+        self.embedding_service = None
         
         # ChromaDB 초기화
+        self._initialize_chroma()
+    
+    def _set_embedding_service(self, embedding_service):
+        """임베딩 서비스 설정 (순환 임포트 방지)"""
+        self.embedding_service = embedding_service
+        # ChromaDB 재초기화
         self._initialize_chroma()
     
     def _initialize_chroma(self):
         """ChromaDB 초기화"""
         try:
+            # 임베딩 서비스가 없으면 더미 함수 사용
+            if self.embedding_service is None:
+                # 더미 임베딩 함수
+                def dummy_embedding(texts):
+                    if isinstance(texts, str):
+                        return [0.0] * 768
+                    return [[0.0] * 768 for _ in texts]
+                
+                embedding_function = type('DummyEmbedding', (), {
+                    'embed_documents': dummy_embedding,
+                    'embed_query': dummy_embedding
+                })()
+            else:
+                embedding_function = self.embedding_service
+            
             # 컬렉션이 존재하면 로드, 아니면 새로 생성
             self.vector_store = Chroma(
                 collection_name=self.collection_name,
                 persist_directory=str(self.persist_directory),
-                embedding_function=self.embedding_service
+                embedding_function=embedding_function
             )
             
             print(f"ChromaDB 초기화 완료: {self.collection_name}")

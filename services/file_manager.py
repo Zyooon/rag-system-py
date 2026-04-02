@@ -127,8 +127,7 @@ class FileManager:
                 return await self._read_docx_content(file_path)
             else:
                 # 텍스트 파일은 비동기로 읽기
-                async with asyncio.to_thread(file_path.read_text, encoding=DEFAULT_ENCODING):
-                    return file_path.read_text(encoding=DEFAULT_ENCODING)
+                return await asyncio.to_thread(file_path.read_text, encoding=DEFAULT_ENCODING)
         except Exception as e:
             raise Exception(f"파일 읽기 실패: {file_path} - {e}")
     
@@ -138,12 +137,15 @@ class FileManager:
             import pypdf
             
             content = []
-            async with asyncio.to_thread(open, file_path, 'rb') as file:
+            file = await asyncio.to_thread(open, file_path, 'rb')
+            try:
                 pdf_reader = pypdf.PdfReader(file)
                 for page in pdf_reader.pages:
                     page_text = page.extract_text()
                     if page_text.strip():
                         content.append(page_text)
+            finally:
+                await asyncio.to_thread(file.close)
             
             return "\n".join(content)
         except ImportError:
@@ -156,13 +158,12 @@ class FileManager:
         try:
             import docx
             
-            async with asyncio.to_thread(docx.Document, file_path):
-                doc = docx.Document(file_path)
-                content = []
-                
-                for paragraph in doc.paragraphs:
-                    if paragraph.text.strip():
-                        content.append(paragraph.text)
+            doc = await asyncio.to_thread(docx.Document, file_path)
+            content = []
+            
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    content.append(paragraph.text)
                 
                 return "\n".join(content)
         except ImportError:

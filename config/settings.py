@@ -5,9 +5,9 @@ Java 프로젝트의 application.properties와 유사한 기능 제공
 
 import os
 from pathlib import Path
-from typing import List, Optional
-from pydantic import BaseSettings, Field
-from pydantic_settings import SettingsConfigDict
+from typing import List, Optional, Dict
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):

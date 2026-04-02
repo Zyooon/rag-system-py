@@ -35,7 +35,16 @@ class RagManagementService:
         self.parse_manager = ParseManager()
         self.text_splitter_processor = TextSplitterProcessor()
         self.redis_document_repository = RedisDocumentRepository()
+        
+        # 벡터 저장소 초기화 (순환 임포트 방지)
+        from repositories import ChromaVectorStore
         self.vector_store = ChromaVectorStore()
+        
+        # 임베딩 서비스 설정
+        from services import EmbeddingService
+        embedding_service = EmbeddingService()
+        self.vector_store._set_embedding_service(embedding_service)
+        
         self.is_initialized = False
     
     # ==================== 문서 처리 기능 ====================
