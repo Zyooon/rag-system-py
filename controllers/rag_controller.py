@@ -14,15 +14,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dto.rag_response import RagResponse
 from services.rag_management_service import RagManagementService
 from constants import (
-    MAP_KEY_MESSAGE, MAP_KEY_IS_INITIALIZED, MAP_KEY_LOADED_FILES,
-    MAP_KEY_DOCUMENT_COUNT, MAP_KEY_TOTAL_COUNT, MAP_KEY_REDIS_CONNECTION,
-    MAP_KEY_VECTOR_STORE_TYPE, MAP_KEY_TOTAL_DELETED, MAP_KEY_RAG_KEYS_DELETED,
-    MAP_KEY_EMBEDDING_KEYS_DELETED, MAP_KEY_SAVED_COUNT, MAP_KEY_DUPLICATE_COUNT,
-    MAP_KEY_DOCUMENT_COUNT as MAP_KEY_DOC_COUNT, REDIS_CONNECTION_CONNECTED,
-    VECTORSTORE_TYPE_SIMPLE_REDIS_BACKUP, MSG_REDIS_CONNECTION_CHECK,
-    MSG_REDIS_STATUS_CHECK_FAILED, MSG_REDIS_VECTORSTORE_DELETE_COMPLETE,
-    MSG_REDIS_VECTORSTORE_DELETE_FAILED, MSG_REDIS_VECTORSTORE_BUILD_FAILED,
-    MSG_DOCUMENTS_RELOADED, MSG_DOCUMENT_RELOAD_FAILED
+    MAP_KEY_TOTAL_DELETED, MAP_KEY_RAG_KEYS_DELETED,
+    MAP_KEY_EMBEDDING_KEYS_DELETED, MAP_KEY_MESSAGE,
+    MSG_REDIS_VECTORSTORE_DELETE_COMPLETE, MSG_REDIS_VECTORSTORE_DELETE_FAILED,
+    MSG_REDIS_VECTORSTORE_BUILD_FAILED, MSG_DOCUMENTS_RELOADED, MSG_DOCUMENT_RELOAD_FAILED
 )
 
 
@@ -34,20 +29,6 @@ class RagController:
     
     def __init__(self):
         self.rag_management_service = RagManagementService()
-    
-    async def get_status(self) -> Dict[str, Any]:
-        """RAG 시스템 상태 조회"""
-        try:
-            status = await self.rag_management_service.get_status_with_files()
-            status[MAP_KEY_REDIS_CONNECTION] = REDIS_CONNECTION_CONNECTED
-            status[MAP_KEY_VECTOR_STORE_TYPE] = VECTORSTORE_TYPE_SIMPLE_REDIS_BACKUP
-            
-            return status
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=MSG_REDIS_STATUS_CHECK_FAILED + str(e)
-            )
     
     async def clear_redis_vector_store(self) -> Dict[str, Any]:
         """Redis 벡터 저장소 초기화"""
@@ -126,45 +107,6 @@ async def get_documents_list():
         raise HTTPException(
             status_code=400,
             detail=f"문서 목록 조회 실패: {str(e)}"
-        )
-
-
-@router.post("/reprocess-contextual")
-async def reprocess_documents_contextually():
-    """저장된 문서들을 맥락별로 재분할하는 엔드포인트"""
-    try:
-        from services.contextual_redocument_service import ContextualRedocumentService
-        redocument_service = ContextualRedocumentService()
-        
-        result = await redocument_service.reprocess_all_documents()
-        
-        return RagResponse.success_response("맥락 기반 문서 재분할 완료", result)
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"문서 재분할 실패: {str(e)}"
-        )
-
-
-@router.get("/reprocess-preview/{filename}")
-async def get_reprocessing_preview(filename: str):
-    """특정 파일의 재분할 미리보기 엔드포인트"""
-    try:
-        from services.contextual_redocument_service import ContextualRedocumentService
-        redocument_service = ContextualRedocumentService()
-        
-        result = await redocument_service.get_reprocessing_preview(filename)
-        
-        if not result.get("found", False):
-            return RagResponse.error_response("파일을 찾을 수 없습니다", result)
-        
-        return RagResponse.success_response(f"'{filename}' 재분할 미리보기", result)
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"미리보기 조회 실패: {str(e)}"
         )
 
 
