@@ -185,6 +185,38 @@ class RedisDocumentRepository:
             print(f"문서 조회 실패: {key} - {e}")
             return None
     
+    async def get_all_documents(self) -> List[Dict[str, Any]]:
+        """
+        모든 문서 조회
+        
+        Returns:
+            모든 문서 리스트
+        """
+        await self._ensure_initialized()
+        
+        if not self.redis_client:
+            return []
+        
+        try:
+            # 모든 문서 키 가져오기
+            keys = await self.get_all_document_keys()
+            
+            if not keys:
+                return []
+            
+            # 모든 문서 데이터 가져오기
+            documents = []
+            for key in keys:
+                doc = await self.get_document(key)
+                if doc:
+                    documents.append(doc)
+            
+            return documents
+            
+        except Exception as e:
+            print(f"모든 문서 조회 실패: {e}")
+            return []
+    
     async def delete_keys_by_patterns(self, key_patterns: List[str]) -> Dict[str, int]:
         """
         키 패턴으로 데이터 삭제

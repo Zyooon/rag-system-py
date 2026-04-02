@@ -27,10 +27,74 @@ class ChromaVectorStore(VectorStoreRepository):
         self._initialize_chroma()
     
     def _set_embedding_service(self, embedding_service):
-        """임베딩 서비스 설정 (순환 임포트 방지)"""
+        """임베딩 서비스 설정 (순환 임포트 방지 및 동기 래퍼 생성)"""
         self.embedding_service = embedding_service
+        
+        # 동기 임베딩 래퍼 생성
+        if embedding_service:
+            import asyncio
+            
+            class SyncEmbedding:
+                def __init__(self, async_service):
+                    self.async_service = async_service
+                
+                def embed_documents(self, texts):
+                    """동기 임베딩 래퍼"""
+                    try:
+                        # 이미 이벤트 루프가 있는 경우
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # 루프가 실행 중이면 새 스레드에서 실행
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(asyncio.run, self.async_service.embed_documents(texts))
+                                return future.result()
+                        else:
+                            # 루프가 없으면 직접 실행
+                            return asyncio.run(self.async_service.embed_documents(texts))
+                    except Exception as e:
+                        print(f"동기 임베딩 실패: {e}")
+                        # 실패 시 더미 벡터 반환
+                        return [[0.0] * 768 for _ in texts]
+                
+                def embed_query(self, text):
+                    """동기 쿼리 임베딩 래퍼"""
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                future = executor.submit(asyncio.run, self.async_service.embed_query(text))
+                                return future.result()
+                        else:
+                            return asyncio.run(self.async_service.embed_query(text))
+                    except Exception as e:
+                        print(f"동기 쿼리 임베딩 실패: {e}")
+                        return [0.0] * 768
+            
+            embedding_function = SyncEmbedding(embedding_service)
+        else:
+            embedding_function = None
+        
         # ChromaDB 재초기화
-        self._initialize_chroma()
+        self._initialize_chroma_with_function(embedding_function)
+    
+    def _initialize_chroma_with_function(self, embedding_function):
+        """임베딩 함수와 함께 ChromaDB 초기화"""
+        try:
+            # 컬렉션이 존재하면 로드, 아니면 새로 생성
+            self.vector_store = Chroma(
+                collection_name=self.collection_name,
+                persist_directory=str(self.persist_directory),
+                embedding_function=embedding_function
+            )
+            
+            print(f"ChromaDB 초기화 완료: {self.collection_name}")
+            print(f"저장 경로: {self.persist_directory}")
+            
+        except Exception as e:
+            print(f"ChromaDB 초기화 실패: {e}")
+            raise
     
     def _initialize_chroma(self):
         """ChromaDB 초기화"""

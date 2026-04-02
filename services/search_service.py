@@ -8,7 +8,7 @@ import asyncio
 from typing import List, Dict, Any, Optional, Set
 from collections import defaultdict
 
-from repositories import ChromaVectorStore, RedisDocumentRepository
+from repositories import RedisDocumentRepository, RedisSearchRepository
 from dto import SourceInfo
 from prompts import PromptTemplate
 from config import settings
@@ -23,14 +23,14 @@ class SearchService:
     """검색 및 답변 생성 전담 서비스"""
     
     def __init__(self):
-        self.vector_store = ChromaVectorStore()
+        self.redis_search_repository = RedisSearchRepository()
         self.redis_document_repository = RedisDocumentRepository()
         self.llm_service = None
         
         # LLM 서비스 초기화 (순환 임포트 방지)
         self._initialize_llm_service()
         
-        self.similarity_threshold = settings.search_threshold
+        self.similarity_threshold = 0.1  # 키워드 검색을 위해 임계값 낮춤
         self.max_search_results = settings.search_max_results * 2  # 검색 범위 확대
     
     def _initialize_llm_service(self):
@@ -42,6 +42,73 @@ class SearchService:
             print("LLM 서비스를 초기화할 수 없습니다")
             self.llm_service = None
     
+    async def _search_documents_by_keyword(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Redis에서 키워드 기반 문서 검색
+        
+        Args:
+            query: 검색 쿼리
+            
+        Returns:
+            검색된 문서 리스트
+        """
+        try:
+            # 모든 문서 가져오기
+            all_documents = await self.redis_document_repository.get_all_documents()
+            
+            if not all_documents:
+                return []
+            
+            # 키워드 기반 필터링
+            query_lower = query.lower()
+            relevant_docs = []
+            
+            for doc in all_documents:
+                text = doc.get('text', '').lower()
+                metadata = doc.get('metadata', {})
+                
+                # 텍스트 내에 쿼리 키워드가 있는지 확인
+                if any(keyword in text for keyword in query_lower.split() if len(keyword) > 1):
+                    # 유사도 점수 계산 (간단한 키워드 매칭 기반)
+                    score = self._calculate_keyword_similarity(query_lower, text)
+                    
+                    relevant_docs.append({
+                        'text': doc.get('text', ''),
+                        'metadata': metadata,
+                        'score': score
+                    })
+            
+            # 점수순 정렬 및 상위 결과 반환
+            relevant_docs.sort(key=lambda x: x['score'], reverse=True)
+            return relevant_docs[:self.max_search_results]
+            
+        except Exception as e:
+            print(f"문서 검색 실패: {e}")
+            return []
+    
+    def _calculate_keyword_similarity(self, query: str, text: str) -> float:
+        """
+        키워드 기반 유사도 계산
+        
+        Args:
+            query: 검색 쿼리
+            text: 문서 텍스트
+            
+        Returns:
+            유사도 점수 (0.0 - 1.0)
+        """
+        query_words = set(query.split())
+        text_words = set(text.split())
+        
+        if not query_words:
+            return 0.0
+        
+        # 교집합 단어 수 / 전체 쿼리 단어 수
+        common_words = query_words.intersection(text_words)
+        similarity = len(common_words) / len(query_words)
+        
+        return similarity
+    
     async def search_and_answer_with_sources(self, query: str) -> Dict[str, Any]:
         """
         사용자 질문에 대해 RAG를 통해 답변을 생성하고 출처 정보도 함께 반환
@@ -52,12 +119,8 @@ class SearchService:
         Returns:
             답변과 출처 정보가 포함된 결과 맵
         """
-        # 벡터 저장소에서 유사 문서 검색
-        relevant_documents = await self.vector_store.similarity_search(
-            query, 
-            k=self.max_search_results,
-            threshold=self.similarity_threshold
-        )
+        # Redis에서 문서 검색 (키워드 기반)
+        relevant_documents = await self._search_documents_by_keyword(query)
         
         if not relevant_documents:
             return {
@@ -123,14 +186,14 @@ class SearchService:
         filtered_docs = []
         
         for doc in documents:
-            similarity_score = doc.get("similarity_score", 0.0)
+            similarity_score = doc.get("score", 0.0)  # 키워드 검색은 'score' 필드 사용
             
             if similarity_score >= self.similarity_threshold:
                 filtered_docs.append(doc)
         
         # 유사도 기준 내림차순 정렬
         filtered_docs.sort(
-            key=lambda x: x.get("similarity_score", 0.0), 
+            key=lambda x: x.get("score", 0.0), 
             reverse=True
         )
         
@@ -153,7 +216,7 @@ class SearchService:
         for doc in documents:
             metadata = doc.get("metadata", {})
             filename = metadata.get("filename", "unknown")
-            similarity_score = doc.get("similarity_score", 0.0)
+            similarity_score = doc.get("score", 0.0)  # 키워드 검색은 'score' 필드 사용
             content = doc.get("text", "")
             
             # README 파일 제외
