@@ -49,18 +49,6 @@ class TextSplitterProcessor:
         """기본 설정으로 문서 리스트 분할"""
         return self.split_with_settings(documents, TextSplitterConfig.get_default_settings())
     
-    def split_documents_for_precise_search(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """정밀 검색용 설정으로 문서 리스트 분할"""
-        return self.split_with_settings(documents, TextSplitterConfig.get_precise_search_settings())
-    
-    def split_documents_for_speed(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """속도 최적화용 설정으로 문서 리스트 분할"""
-        return self.split_with_settings(documents, TextSplitterConfig.get_speed_optimization_settings())
-    
-    def split_document(self, document: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """단일 문서를 기본 설정으로 분할"""
-        return self.split_documents([document])
-    
     # ==================== 긴 문서 분할 ====================
     
     def split_long_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -349,39 +337,6 @@ class TextSplitterProcessor:
             return f"분할이 부족합니다 (평균 {avg_length:.0f}자)"
         else:
             return f"일반적인 분할 결과입니다 (평균 {avg_length:.0f}자)"
-    
-    # ==================== 기존 호환성 메서드 ====================
-    
-    def split_and_parse_documents(self, raw_documents: List[Dict[str, Any]], parse_manager) -> List[Dict[str, Any]]:
-        """원본 문서를 분할하고 파싱하는 통합 메서드 (기존 호환성)"""
-        processed_documents = []
-        
-        for raw_doc in raw_documents:
-            text = raw_doc.get("text", "")
-            filename = raw_doc.get("metadata", {}).get("filename", "")
-            
-            # ParseManager로 파싱 (HierarchicalParser가 최적의 분할을 수행)
-            parsed_docs = parse_manager.parse_document(text, filename)
-            
-            if not parsed_docs:
-                # 파싱 실패시 원본 텍스트를 기본 청크로 사용
-                fallback_doc = {
-                    "text": text,
-                    "metadata": {
-                        **raw_doc.get("metadata", {}),
-                        "parser": "Fallback",
-                        "chunk_index": 0
-                    }
-                }
-                processed_documents.append(fallback_doc)
-                logger.warning(f"파싱 실패: {filename} - 원본 텍스트 사용")
-            else:
-                # 파싱된 문서들은 이미 최적의 크기로 분할되어 있으므로 그대로 사용
-                processed_documents.extend(parsed_docs)
-                logger.info(f"ParseManager 파싱 완료: {filename} -> {len(parsed_docs)}개 조각")
-        
-        logger.info(f"총 {len(processed_documents)}개 최종 청크 생성")
-        return processed_documents
     
     def split_text(self, text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
         """텍스트를 청크로 분할 - LangChain RecursiveCharacterTextSplitter 사용"""
