@@ -9,6 +9,8 @@ from typing import List, Dict, Any, Set
 from pathlib import Path
 
 from services import FileManager, ParseManager
+from splitters import TextSplitterProcessor
+from repositories import RedisDocumentRepository
 from config import settings
 from constants import (
     MAP_KEY_SAVED_COUNT, MAP_KEY_DUPLICATE_COUNT, MAP_KEY_TOTAL_COUNT, MAP_KEY_DOCUMENT_COUNT,
@@ -31,11 +33,9 @@ class RagManagementService:
     def __init__(self):
         self.file_manager = FileManager()
         self.parse_manager = ParseManager()
+        self.text_splitter_processor = TextSplitterProcessor()
+        self.redis_document_repository = RedisDocumentRepository()
         self.is_initialized = False
-        
-        # TODO: 실제 Redis 및 벡터 저장소 의존성 주입 필요
-        self.redis_document_repository = None
-        self.vector_store = None
     
     # ==================== 문서 처리 기능 ====================
     
@@ -75,10 +75,19 @@ class RagManagementService:
         all_documents = await self.load_documents_from_folder_simple(folder_path)
         
         if all_documents:
-            # TODO: 실제 벡터 저장소 및 Redis 저장 로직 구현
-            # split_documents = text_splitter_processor.split_documents(all_documents)
+            # TextSplitterProcessor를 통한 긴 문서 분할
+            split_documents = self.text_splitter_processor.split_documents(all_documents)
+            
+            # TODO: 실제 벡터 저장소 저장 로직 구현
             # vector_store.add(split_documents)
-            # save_result = redis_document_repository.save_documents(split_documents)
+            try:
+                print(f"벡터 저장소에 {len(split_documents)}개 문서 저장 시도")
+                # 임시 성공 가정
+            except Exception as e:
+                print(f"벡터 저장소 저장 실패: {e}")
+            
+            # RedisDocumentRepository를 통한 문서 저장
+            save_result = await self.redis_document_repository.save_documents(split_documents)
             
             # 임시 구현
             save_result = {
@@ -110,15 +119,8 @@ class RagManagementService:
             # 1. VectorStore 데이터 정리
             # 2. RedisTemplate을 통해 안전하게 키 삭제
             
-            # 임시 구현
-            rag_deleted = 0
-            embedding_deleted = 0
-            total_deleted = rag_deleted + embedding_deleted
-            
-            result[MAP_KEY_RAG_KEYS] = rag_deleted
-            result[MAP_KEY_EMBEDDING_KEYS] = embedding_deleted
-            result[MAP_KEY_TOTAL_DELETED] = total_deleted
-            result[MAP_KEY_MESSAGE] = f"{MSG_VECTORSTORE_DATA_CLEANED}: 총 {total_deleted}개 키 삭제됨"
+            key_patterns = self.redis_document_repository.get_key_patterns()
+            delete_results = await self.redis_document_repository.delete_keys_by_patterns(key_patterns)
             
             print(f"벡터 저장소 초기화 완료: 총 {total_deleted}개 키 삭제됨")
             
@@ -157,8 +159,7 @@ class RagManagementService:
                 vector_store_count = 0
             
             # TODO: 실제 Redis 키 조회 로직 구현
-            # redis_keys = redis_document_repository.getAllDocumentKeys()
-            redis_keys = []  # 임시 구현
+            redis_keys = await self.redis_document_repository.get_all_document_keys()
             
             if redis_keys:
                 status[MAP_KEY_RAG_KEYS_DELETED] = redis_keys
@@ -166,8 +167,7 @@ class RagManagementService:
                 # Redis에 저장된 메타데이터에서 파일명 추출
                 for key in redis_keys:
                     try:
-                        # doc = redis_document_repository.getDocument(key)
-                        doc = {}  # 임시 구현
+                        doc = await self.redis_document_repository.get_document(key)
                         if doc:
                             metadata = doc.get("metadata", {})
                             
