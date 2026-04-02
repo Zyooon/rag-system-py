@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from parsers.document_parser import DocumentParser
 from parsers.simple_line_parser import SimpleLineParser
 from parsers.markdown_parser import MarkdownParser
+from parsers.hierarchical_parser import HierarchicalParser
 from config import settings
 
 
@@ -18,14 +19,16 @@ class ParseManager:
     def __init__(self):
         # 사용 가능한 파서들 초기화
         self.document_parsers = [
+            HierarchicalParser(max_chunk_size=settings.chunk_size, overlap=settings.chunk_overlap),
             MarkdownParser(max_chunk_size=settings.chunk_size, overlap=settings.chunk_overlap),
             SimpleLineParser(max_chunk_size=settings.chunk_size, overlap=settings.chunk_overlap)
         ]
         
         # 기본 파서 우선순위 설정
         self.default_parser_priorities = {
-            "Markdown": 1,
-            "SimpleLine": 2
+            "Hierarchical": 1,
+            "Markdown": 2,
+            "SimpleLine": 3
         }
     
     def parse_document(self, content: str, filename: str) -> List[Dict[str, Any]]:
@@ -216,6 +219,29 @@ class ParseManager:
         elif parser_name == "SimpleLine":
             # SimpleLineParser는 특별한 패턴이 없으므로 기본 정보만 출력
             print(f"{parser_name}: 일반 텍스트 파서 (특별한 패턴 없음)")
+        
+        elif parser_name == "Hierarchical":
+            # 계층적 패턴 확인
+            lines = content.splitlines()
+            hierarchical_patterns = 0
+            bullet_patterns = 0
+            
+            for line in lines:
+                line_stripped = line.strip()
+                if re.match(r'^\s*\d+\.\s+', line_stripped):  # 1., 2. ...
+                    hierarchical_patterns += 1
+                elif re.match(r'^\s*\d+\.\d+\s+', line_stripped):  # 1.1, 1.2 ...
+                    hierarchical_patterns += 1
+                elif re.match(r'^\s*\(\d+\)\s+', line_stripped):  # (1), (2) ...
+                    hierarchical_patterns += 1
+                elif re.match(r'^\s*[-*+•]\s+', line_stripped):  # 불릿
+                    bullet_patterns += 1
+                elif re.match(r'^\s*[가-힣]\.\s+', line_stripped):  # 가. 나. ...
+                    hierarchical_patterns += 1
+            
+            total_patterns = hierarchical_patterns + bullet_patterns
+            percentage = (total_patterns * 100 // total_lines) if total_lines > 0 else 0
+            print(f"{parser_name} 패턴: 계층적 {hierarchical_patterns}개, 불릿 {bullet_patterns}개 ({percentage}%)")
         
         else:
             print(f"알 수 없는 파서: {parser_name}")
