@@ -11,6 +11,7 @@ from collections import defaultdict
 from repositories import ChromaVectorStore, RedisDocumentRepository
 from dto import SourceInfo
 from prompts import PromptTemplate
+from services import LLMService
 from config import settings
 from constants import (
     MAP_KEY_ANSWER, MAP_KEY_SOURCES, METADATA_KEY_FILENAME, 
@@ -25,11 +26,9 @@ class SearchService:
     def __init__(self):
         self.vector_store = ChromaVectorStore()
         self.redis_document_repository = RedisDocumentRepository()
+        self.llm_service = LLMService()
         self.similarity_threshold = settings.search_threshold
         self.max_search_results = settings.search_max_results
-        
-        # TODO: 실제 LLM 모델 연결 필요
-        self.llm = None
     
     async def search_and_answer_with_sources(self, query: str) -> Dict[str, Any]:
         """
@@ -79,7 +78,7 @@ class SearchService:
         prompt = PromptTemplate.create_search_with_sources_prompt(context, query)
         
         try:
-            answer = await self._call_llm(prompt)
+            answer = await self.llm_service.generate_answer(prompt)
             best_source = self._find_best_matching_source(answer, filtered_docs, sources)
             
             return {
@@ -271,7 +270,7 @@ class SearchService:
     
     async def _call_llm(self, prompt: str) -> str:
         """
-        LLM 호출
+        LLM 호출 (이전 메서드와 호환성)
         
         Args:
             prompt: LLM에 전달할 프롬프트
@@ -279,9 +278,7 @@ class SearchService:
         Returns:
             LLM 응답
         """
-        # TODO: 실제 LLM 모델 연결
-        # 현재는 임시 응답 반환
-        return f"질문에 대한 답변입니다. (임시 구현 - 실제 LLM 연결 필요)"
+        return await self.llm_service.generate_answer(prompt)
     
     def _find_best_matching_source(self, answer: str, documents: List[Dict[str, Any]], sources: List[SourceInfo]) -> SourceInfo:
         """

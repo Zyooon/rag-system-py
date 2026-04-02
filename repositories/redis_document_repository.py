@@ -7,6 +7,7 @@ import json
 import asyncio
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
+import redis.asyncio as redis
 
 from config import settings
 
@@ -18,10 +19,27 @@ class RedisDocumentRepository:
         self.redis_url = settings.redis_url
         self.rag_key_prefix = settings.redis_rag_key_prefix
         self.embedding_key_prefix = settings.redis_embedding_key_prefix
+        self.redis_client: Optional[redis.Redis] = None
         
-        # TODO: 실제 Redis 클라이언트 연결 필요
-        # self.redis_client = redis.from_url(self.redis_url)
-        print(f"Redis 저장소 초기화: {self.redis_url}")
+        # Redis 클라이언트 초기화
+        asyncio.create_task(self._initialize_redis())
+    
+    async def _initialize_redis(self):
+        """Redis 클라이언트 초기화"""
+        try:
+            self.redis_client = redis.from_url(
+                self.redis_url,
+                encoding="utf-8",
+                decode_responses=True
+            )
+            
+            # 연결 테스트
+            await self.redis_client.ping()
+            print(f"Redis 연결 성공: {self.redis_url}")
+            
+        except Exception as e:
+            print(f"Redis 연결 실패: {e}")
+            self.redis_client = None
     
     async def save_documents(self, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -33,11 +51,22 @@ class RedisDocumentRepository:
         Returns:
             저장 결과 통계
         """
+        if not self.redis_client:
+            print("Redis 클라이언트가 초기화되지 않았습니다")
+            return {
+                "saved_count": 0,
+                "duplicate_count": 0,
+                "total_processed": len(documents),
+                "error": "Redis 연결 실패"
+            }
+        
         try:
             saved_count = 0
             duplicate_count = 0
             
-            # TODO: 실제 Redis 저장 로직 구현
+            # 파이프라인을 사용하여 성능 향상
+            pipe = self.redis_client.pipeline()
+            
             for doc in documents:
                 doc_id = self._generate_document_id(doc)
                 metadata = doc.get("metadata", {})
@@ -45,9 +74,23 @@ class RedisDocumentRepository:
                 # 메타데이터를 JSON으로 변환하여 저장
                 metadata_json = json.dumps(metadata, ensure_ascii=False)
                 
-                # 임시 구현 - 실제로는 Redis에 저장
-                print(f"문서 저장 시도: {doc_id}")
-                saved_count += 1
+                # 이미 존재하는지 확인
+                exists = await self.redis_client.exists(doc_id)
+                
+                if not exists:
+                    # 문서 내용과 메타데이터 저장
+                    await pipe.hset(doc_id, mapping={
+                        "text": doc.get("text", ""),
+                        "metadata": metadata_json
+                    })
+                    saved_count += 1
+                else:
+                    duplicate_count += 1
+            
+            # 파이프라인 실행
+            await pipe.execute()
+            
+            print(f"Redis에 {saved_count}개 문서 저장됨, {duplicate_count}개 중복")
             
             return {
                 "saved_count": saved_count,
@@ -71,17 +114,13 @@ class RedisDocumentRepository:
         Returns:
             문서 키 리스트
         """
+        if not self.redis_client:
+            print("Redis 클라이언트가 초기화되지 않았습니다")
+            return []
+        
         try:
-            # TODO: 실제 Redis 키 조회 로직 구현
-            # keys = self.redis_client.keys(f"{self.rag_key_prefix}:*")
-            
-            # 임시 구현
-            keys = [
-                f"{self.rag_key_prefix}:doc1",
-                f"{self.rag_key_prefix}:doc2",
-                f"{self.rag_key_prefix}:doc3"
-            ]
-            
+            pattern = f"{self.rag_key_prefix}:*"
+            keys = await self.redis_client.keys(pattern)
             return keys
         
         except Exception as e:
@@ -98,29 +137,29 @@ class RedisDocumentRepository:
         Returns:
             문서 데이터 또는 None
         """
-        try:
-            # TODO: 실제 Redis 문서 조회 로직 구현
-            # data = self.redis_client.get(key)
-            
-            # 임시 구현
-            if "doc1" in key:
-                return {
-                    "text": "샘플 문서 내용 1...",
-                    "metadata": {
-                        "filename": "sample.txt",
-                        "chunk_index": 0
-                    }
-                }
-            elif "doc2" in key:
-                return {
-                    "text": "샘플 문서 내용 2...",
-                    "metadata": {
-                        "filename": "README.md",
-                        "chunk_index": 1
-                    }
-                }
-            
+        if not self.redis_client:
             return None
+        
+        try:
+            doc_data = await self.redis_client.hgetall(key)
+            
+            if not doc_data:
+                return None
+            
+            # 텍스트와 메타데이터 추출
+            text = doc_data.get("text", "")
+            metadata_str = doc_data.get("metadata", "{}")
+            
+            # 메타데이터 파싱
+            try:
+                metadata = json.loads(metadata_str)
+            except json.JSONDecodeError:
+                metadata = {"filename": "unknown"}
+            
+            return {
+                "text": text,
+                "metadata": metadata
+            }
         
         except Exception as e:
             print(f"문서 조회 실패: {key} - {e}")
@@ -136,24 +175,24 @@ class RedisDocumentRepository:
         Returns:
             삭제된 키 수 통계
         """
+        if not self.redis_client:
+            print("Redis 클라이언트가 초기화되지 않았습니다")
+            return {}
+        
         try:
             delete_results = {}
             
             for pattern in key_patterns:
-                # TODO: 실제 Redis 키 삭제 로직 구현
-                # deleted_count = len(self.redis_client.keys(pattern))
-                # self.redis_client.delete(*keys)
+                # 패턴에 해당하는 키 찾기
+                keys = await self.redis_client.keys(pattern)
                 
-                # 임시 구현
-                if "rag:documents" in pattern:
-                    deleted_count = 3  # doc1, doc2, doc3
-                elif "rag:embeddings" in pattern:
-                    deleted_count = 0
+                if keys:
+                    # 키 삭제
+                    deleted_count = await self.redis_client.delete(*keys)
+                    delete_results[pattern] = deleted_count
+                    print(f"키 패턴 삭제: {pattern} -> {deleted_count}개")
                 else:
-                    deleted_count = 0
-                
-                delete_results[pattern] = deleted_count
-                print(f"키 패턴 삭제: {pattern} -> {deleted_count}개")
+                    delete_results[pattern] = 0
             
             return delete_results
         

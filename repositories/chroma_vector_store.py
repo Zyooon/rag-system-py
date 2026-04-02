@@ -11,6 +11,7 @@ from datetime import datetime
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from services import EmbeddingService
 from config import settings
 from .vector_store_repository import VectorStoreRepository
 
@@ -21,7 +22,7 @@ class ChromaVectorStore(VectorStoreRepository):
     def __init__(self):
         self.collection_name = settings.chroma_collection_name
         self.persist_directory = settings.chroma_path
-        self.embeddings = None  # TODO: 실제 임베딩 모델 연결
+        self.embedding_service = EmbeddingService()
         
         # ChromaDB 초기화
         self._initialize_chroma()
@@ -33,7 +34,7 @@ class ChromaVectorStore(VectorStoreRepository):
             self.vector_store = Chroma(
                 collection_name=self.collection_name,
                 persist_directory=str(self.persist_directory),
-                embedding_function=self.embeddings
+                embedding_function=self.embedding_service
             )
             
             print(f"ChromaDB 초기화 완료: {self.collection_name}")
