@@ -16,6 +16,7 @@ Java 프로젝트의 TextSplitterProcessor와 유사한 기능 제공
 
 import asyncio
 import logging
+import re
 from typing import List, Dict, Any, Tuple
 from abc import ABC, abstractmethod
 
@@ -52,7 +53,7 @@ class TextSplitterProcessor:
     # ==================== 긴 문서 분할 ====================
     
     def split_long_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """긴 문서만 분할 (800자 이상인 문서만)"""
+        """긴 문서만 분할 (LONG_DOCUMENT_THRESHOLD 이상인 문서만)"""
         result = []
         
         for doc in documents:
@@ -63,7 +64,7 @@ class TextSplitterProcessor:
         return result
     
     def split_long_document(self, document: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """단일 긴 문서 분할 (800자 이상인 경우만 분할)"""
+        """단일 긴 문서 분할 (LONG_DOCUMENT_THRESHOLD 이상인 경우만 분할)"""
         text = document.get("text", "")
         
         if len(text) <= TextSplitterConfig.LONG_DOCUMENT_THRESHOLD:
@@ -186,12 +187,33 @@ class TextSplitterProcessor:
         return chunks
     
     def is_table_document(self, document: Dict[str, Any]) -> bool:
-        """테이블 문서인지 감지"""
+        """테이블 문서인지 감지 (내용 기반으로 개선)"""
+        content = document.get("text", "")
         metadata = document.get("metadata", {})
         filename = metadata.get("filename", "")
         
-        # 오직 파일명이 "table"을 포함하는 경우에만 테이블로 처리
-        return "table" in filename.lower() or "TABLE" in filename
+        # 1. 파일명에 'table'이 포함된 경우 (기존 로직 유지)
+        if "table" in filename.lower() or "TABLE" in filename:
+            return True
+        
+        # 2. 내용 기반 테이블 감지
+        lines = content.split('\n')
+        table_row_count = 0
+        has_header_separator = False
+        
+        for line in lines:
+            stripped_line = line.strip()
+            
+            # 테이블 형식 확인: | 내용 | 내용 |
+            if re.match(r'^\|.*\|$', stripped_line):
+                table_row_count += 1
+                
+                # 헤더 구분자 확인: |---|---| 또는 |:---|:---|
+                if '---' in stripped_line and (':' in stripped_line or stripped_line.count('|') >= 3):
+                    has_header_separator = True
+        
+        # 테이블 행이 3개 이상이고 헤더 구분자가 있으면 테이블로 간주
+        return table_row_count >= 3 and has_header_separator
     
     def split_table_document(self, document: Dict[str, Any]) -> List[Dict[str, Any]]:
         """테이블 문서를 개별 행으로 분할"""

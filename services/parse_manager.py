@@ -29,11 +29,11 @@ class ParseManager:
         # TextSplitterProcessor 초기화 (하이브리드 방식용)
         self.text_splitter = TextSplitterProcessor()
         
-        # 기본 파서 우선순위 설정 (계층적 구조 우선)
+        # 기본 파서 우선순위 설정 (계층적 구조 우선) - settings.py에서 가져오기
         self.default_parser_priorities = {
-            "hierarchical": 1,    # 1., 1.1, (1) 같은 숫자 패턴 (불릿 포함) - 우선순위 최상
-            "Markdown": 2,        # #, ## 같은 헤더 기반
-            "SimpleLine": 3       # 문단 단위 (\n\n)
+            "hierarchical": settings.hierarchical_parser_priority,    # 1., 1.1, (1) 같은 숫자 패턴 (불릿 포함) - 우선순위 최상
+            "Markdown": settings.markdown_parser_priority,        # #, ## 같은 헤더 기반
+            "SimpleLine": settings.simple_line_parser_priority       # 문단 단위 (\n\n)
         }
     
     def parse_document(self, content: str, filename: str) -> List[Dict[str, Any]]:

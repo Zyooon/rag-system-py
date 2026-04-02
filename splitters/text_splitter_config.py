@@ -16,6 +16,7 @@ Java 프로젝트의 TextSplitterConfig와 유사한 기능 제공
 
 from dataclasses import dataclass
 from typing import List
+from config.settings import settings
 
 
 class TextSplitterConfig:
@@ -23,56 +24,54 @@ class TextSplitterConfig:
     
     # ==================== 기본 설정 ====================
     
-    # 기본 청크 크기 (토큰 단위)
-    DEFAULT_CHUNK_SIZE = 300
+    # 기본 청크 크기 (토큰 단위) - settings.py에서 가져오기
+    DEFAULT_CHUNK_SIZE = settings.chunk_size
     
-    # 최소 청크 문자 수
-    DEFAULT_MIN_CHUNK_SIZE_CHARS = 50
+    # 최소 청크 문자 수 - settings.py에서 가져오기
+    DEFAULT_MIN_CHUNK_SIZE_CHARS = settings.min_chunk_size_chars
     
-    # 임베딩 최소 길이
-    DEFAULT_MIN_CHUNK_LENGTH_TO_EMBED = 20
+    # 임베딩을 위한 최소 청크 길이
+    DEFAULT_MIN_CHUNK_LENGTH_TO_EMBED = 10
     
-    # 최대 청크 수
-    DEFAULT_MAX_NUM_CHUNKS = 500
+    # 생성할 청크의 최대 수량
+    DEFAULT_MAX_NUM_CHUNKS = 50
     
-    # 구분자 유지 여부
-    DEFAULT_KEEP_SEPARATOR = True
+    # 청크 간 겹침 크기 - settings.py에서 가져오기
+    DEFAULT_CHUNK_OVERLAP = settings.chunk_overlap
     
     # 기본 구분자 문자들
     DEFAULT_PUNCTUATION_MARKS = ['.', '\n', ']', '-', '|']
     
     # ==================== 정밀 검색 설정 ====================
     
-    # 정밀 검색용 청크 크기 (더 세분화)
-    PRECISE_CHUNK_SIZE = 100
+    # 정밀 검색용 청크 크기 (더 세분화) - settings.py에서 가져오기
+    PRECISE_CHUNK_SIZE = settings.precise_chunk_size
     
-    # 정밀 검색용 최소 청크 문자 수 (더 짧음)
-    PRECISE_MIN_CHUNK_SIZE_CHARS = 30
+    # 정밀 검색용 최소 청크 문자 수 (더 짧음) - settings.py에서 가져오기
+    PRECISE_MIN_CHUNK_SIZE_CHARS = settings.precise_min_chunk_size_chars
     
     # 정밀 검색용 임베딩 최소 길이 (더 낮음)
     PRECISE_MIN_CHUNK_LENGTH_TO_EMBED = 10
     
-    # 정밀 검색용 최대 청크 수 (더 많음)
-    PRECISE_MAX_NUM_CHUNKS = 800
+    # 정밀 검색용 최대 청크 수 (더 많음) - settings.py에서 가져오기
+    PRECISE_MAX_NUM_CHUNKS = settings.precise_max_num_chunks
     
     # ==================== 속도 최적화 설정 ====================
     
-    # 속도 최적화용 청크 크기 (더 큼)
-    SPEED_CHUNK_SIZE = 400
+    # 속도 최적화용 청크 크기 (더 큼) - settings.py에서 가져오기
+    SPEED_CHUNK_SIZE = settings.speed_chunk_size
     
-    # 속도 최적화용 최소 청크 문자 수 (더 김)
-    SPEED_MIN_CHUNK_SIZE_CHARS = 100
+    # 속도 최적화용 최소 청크 문자 수 (더 김) - settings.py에서 가져오기
+    SPEED_MIN_CHUNK_SIZE_CHARS = settings.speed_min_chunk_size_chars
     
     # 속도 최적화용 임베딩 최소 길이
     SPEED_MIN_CHUNK_LENGTH_TO_EMBED = 10
     
     # 속도 최적화용 최대 청크 수 (더 많음)
-    SPEED_MAX_NUM_CHUNKS = 1000
+    SPEED_MAX_NUM_CHUNKS = 30
     
-    # ==================== 문서 길이 기준 ====================
-    
-    # 긴 문서 기준 길이 (800자 이상이면 분할 대상)
-    LONG_DOCUMENT_THRESHOLD = 800
+    # 긴 문서 기준 - settings.py에서 가져오기
+    LONG_DOCUMENT_THRESHOLD = settings.long_document_threshold
     
     # ==================== 설정 조합 ====================
     

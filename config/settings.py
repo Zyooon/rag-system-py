@@ -39,6 +39,26 @@ class Settings(BaseSettings):
     redis_rag_key_prefix: str = Field(default="rag:documents", env="REDIS_RAG_KEY_PREFIX")
     redis_embedding_key_prefix: str = Field(default="rag:embeddings", env="REDIS_EMBEDDING_KEY_PREFIX")
     
+    # 텍스트 분할 설정
+    chunk_size: int = Field(default=300, env="CHUNK_SIZE")
+    chunk_overlap: int = Field(default=50, env="CHUNK_OVERLAP")
+    min_chunk_size_chars: int = Field(default=50, env="MIN_CHUNK_SIZE_CHARS")
+    long_document_threshold: int = Field(default=800, env="LONG_DOCUMENT_THRESHOLD")
+    
+    # 정밀 검색 설정
+    precise_chunk_size: int = Field(default=100, env="PRECISE_CHUNK_SIZE")
+    precise_min_chunk_size_chars: int = Field(default=30, env="PRECISE_MIN_CHUNK_SIZE_CHARS")
+    precise_max_num_chunks: int = Field(default=800, env="PRECISE_MAX_NUM_CHUNKS")
+    
+    # 속도 최적화 설정
+    speed_chunk_size: int = Field(default=400, env="SPEED_CHUNK_SIZE")
+    speed_min_chunk_size_chars: int = Field(default=100, env="SPEED_MIN_CHUNK_SIZE_CHARS")
+    
+    # 파서 우선순위 설정
+    hierarchical_parser_priority: int = Field(default=1, env="HIERARCHICAL_PARSER_PRIORITY")
+    markdown_parser_priority: int = Field(default=2, env="MARKDOWN_PARSER_PRIORITY")
+    simple_line_parser_priority: int = Field(default=3, env="SIMPLE_LINE_PARSER_PRIORITY")
+    
     # 벡터 저장소 설정
     vector_store_type: str = Field(default="chroma", env="VECTOR_STORE_TYPE")
     chroma_persist_directory: str = Field(default="./chroma_db", env="CHROMA_PERSIST_DIRECTORY")

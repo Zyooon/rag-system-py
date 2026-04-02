@@ -86,8 +86,18 @@ class RagManagementService:
         raw_documents = await self.load_raw_documents_from_folder(folder_path)
         
         if raw_documents:
-            # 맥락 기반 문서 분할 사용
-            processed_documents = await self._split_documents_contextually(raw_documents)
+            # ParseManager를 통한 전략적 문서 분할
+            processed_documents = []
+            for doc in raw_documents:
+                content = doc.get('text', '')
+                filename = doc.get('metadata', {}).get('filename', 'unknown')
+                
+                # ParseManager로 최적의 파서 선택 및 분할
+                parsed_chunks = self.parse_manager.parse_document(content, filename)
+                processed_documents.extend(parsed_chunks)
+            
+            # 크기 최적화 (TextSplitterProcessor)
+            processed_documents = self._optimize_chunk_sizes(processed_documents)
             
             # 벡터 저장소에 문서 추가
             try:
@@ -107,6 +117,52 @@ class RagManagementService:
             }
             
             return self.create_save_result(raw_documents, processed_documents, save_result)
+    
+    def _optimize_chunk_sizes(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        TextSplitterProcessor로 청크 크기 최적화
+        
+        Args:
+            chunks: 파서로 1차 분할된 청크 리스트
+            
+        Returns:
+            크기 최적화된 청크 리스트
+        """
+        from datetime import datetime
+        
+        optimized_chunks = []
+        max_chunk_size = settings.chunk_size
+        
+        for i, chunk in enumerate(chunks):
+            text = chunk.get('text', '')
+            metadata = chunk.get('metadata', {})
+            
+            # 청크가 최대 크기를 초과하는 경우만 재분할
+            if len(text) > max_chunk_size:
+                # TextSplitterProcessor로 재분할
+                oversized_chunks = [chunk]  # 개별 청크로 처리
+                split_chunks = self.text_splitter_processor.split_documents(oversized_chunks)
+                
+                # 재분할된 청크에 메타데이터 업데이트
+                for j, split_chunk in enumerate(split_chunks):
+                    split_chunk['metadata'].update(metadata)
+                    split_chunk['metadata']['chunk_index'] = len(optimized_chunks)
+                    split_chunk['metadata']['splitter_type'] = 'size_optimized'
+                    split_chunk['metadata']['saved_at'] = datetime.now().isoformat()
+                    split_chunk['metadata']['original_parser'] = metadata.get('splitter_type', 'unknown')
+                    split_chunk['metadata']['parent_chunk_index'] = i
+                    
+                    optimized_chunks.append(split_chunk)
+                
+                print(f"청크 크기 최적화: {len(text)} → {len(split_chunks)}개 작은 청크")
+            else:
+                # 크기가 적절하면 그대로 사용
+                chunk['metadata']['chunk_index'] = len(optimized_chunks)
+                chunk['metadata']['saved_at'] = datetime.now().isoformat()
+                optimized_chunks.append(chunk)
+        
+        print(f"크기 최적화 완료: {len(chunks)} → {len(optimized_chunks)}개 청크")
+        return optimized_chunks
     
     async def _split_documents_contextually(self, raw_documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
