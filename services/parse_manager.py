@@ -5,35 +5,40 @@ Java 프로젝트의 ParseManager와 유사한 기능 제공
 
 import re
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 
 from parsers.document_parser import DocumentParser
 from parsers.simple_line_parser import SimpleLineParser
 from parsers.markdown_parser import MarkdownParser
 from parsers.hierarchical_parser import HierarchicalParser
+from splitters.text_splitter_processor import TextSplitterProcessor
 from config import settings
 
 
 class ParseManager:
-    """문서 파싱 관리 전문 서비스"""
+    """문서 파싱 관리 전문 서비스 - 하이브리드 파싱 방식 지원"""
     
     def __init__(self):
-        # 사용 가능한 파서들 초기화
+        # 사용 가능한 파서들 초기화 (제안된 우선순위 적용)
         self.document_parsers = [
-            HierarchicalParser(),
             MarkdownParser(max_chunk_size=settings.chunk_size, overlap=settings.chunk_overlap),
+            HierarchicalParser(),
             SimpleLineParser(max_chunk_size=settings.chunk_size, overlap=settings.chunk_overlap)
         ]
         
-        # 기본 파서 우선순위 설정
+        # TextSplitterProcessor 초기화 (하이브리드 방식용)
+        self.text_splitter = TextSplitterProcessor()
+        
+        # 기본 파서 우선순위 설정 (계층적 구조 우선)
         self.default_parser_priorities = {
-            "Hierarchical": 1,
-            "Markdown": 2,
-            "SimpleLine": 3
+            "hierarchical": 1,    # 1., 1.1, (1) 같은 숫자 패턴 (불릿 포함) - 우선순위 최상
+            "Markdown": 2,        # #, ## 같은 헤더 기반
+            "SimpleLine": 3       # 문단 단위 (\n\n)
         }
     
     def parse_document(self, content: str, filename: str) -> List[Dict[str, Any]]:
         """
-        문서 내용에 가장 적합한 파서를 선택하여 파싱 실행
+        문서 내용에 가장 적합한 파서를 선택하여 파싱 실행 (하이브리드 방식)
         
         Args:
             content: 원본 문서 내용
@@ -47,7 +52,9 @@ class ParseManager:
         # 기본 메타데이터 생성
         base_metadata = {
             "filename": filename,
-            "source_type": "file"
+            "source_type": "file",
+            "saved_at": datetime.now().isoformat(),
+            "parser_type": "hybrid"
         }
         
         # 사용 가능한 파서들을 우선순위 순서로 정렬
@@ -55,30 +62,16 @@ class ParseManager:
         
         print(f"사용 가능한 파서: {[p.get_parser_name() for p in sorted_parsers]}")
         
-        # 각 파서를 시도하여 최상의 결과 선택
-        for parser in sorted_parsers:
-            try:
-                can_handle = parser.can_handle(content)
-                print(f"{parser.get_parser_name()} can_handle: {can_handle}")
-                
-                if can_handle:
-                    result = parser.parse(content, base_metadata)
-                    
-                    if self._is_good_parsing_result(result, content):
-                        print(f"{parser.get_parser_name()} 선택됨: {filename} -> {len(result)}개 청크")
-                        return result
-                    
-                    print(f"{parser.get_parser_name()} 파싱 결과 부적합: {len(result)}개 청크")
-                else:
-                    print(f"{parser.get_parser_name()} 처리 불가: {filename}")
-                
-            except Exception as e:
-                print(f"{parser.get_parser_name()} 파싱 실패: {e}")
+        # 1단계: 구조적 파싱 시도
+        structural_chunks = self._try_structural_parsing(content, base_metadata, sorted_parsers)
         
-        # 모든 파서가 실패한 경우, 가장 낮은 우선순위의 파서로 기본 파싱
-        fallback_parser = sorted_parsers[-1]
-        print(f"모든 파서 실패, {fallback_parser.get_parser_name()}로 기본 파싱: {filename}")
-        return fallback_parser.parse(content, base_metadata)
+        if structural_chunks:
+            print(f"구조적 파싱 성공: {filename} -> {len(structural_chunks)}개 청크")
+            return structural_chunks
+        
+        # 2단계: 하이브리드 파싱 (구조적 분할 + 재귀적 분할)
+        print(f"구조적 파싱 실패, 하이브리드 파싱 시도: {filename}")
+        return self._hybrid_parsing(content, base_metadata)
     
     def _get_sorted_parsers(self) -> List[DocumentParser]:
         """
@@ -88,6 +81,187 @@ class ParseManager:
             우선순위 순서로 정렬된 DocumentParser 리스트
         """
         return sorted(self.document_parsers, key=self._get_parser_priority)
+    
+    def _try_structural_parsing(self, content: str, base_metadata: Dict[str, Any], sorted_parsers: List[DocumentParser]) -> List[Dict[str, Any]]:
+        """
+        구조적 파싱 시도 (기존 방식)
+        
+        Args:
+            content: 원본 내용
+            base_metadata: 기본 메타데이터
+            sorted_parsers: 정렬된 파서 리스트
+            
+        Returns:
+            구조적 파싱 결과 또는 빈 리스트
+        """
+        for parser in sorted_parsers:
+            try:
+                can_handle = parser.can_handle(content)
+                print(f"{parser.get_parser_name()} can_handle: {can_handle}")
+                
+                if can_handle:
+                    result = parser.parse(content, base_metadata)
+                    
+                    if self._is_good_parsing_result(result, content):
+                        print(f"{parser.get_parser_name()} 선택됨: {len(result)}개 청크")
+                        return result
+                    
+                    print(f"{parser.get_parser_name()} 파싱 결과 부적합: {len(result)}개 청크")
+                else:
+                    print(f"{parser.get_parser_name()} 처리 불가")
+                
+            except Exception as e:
+                print(f"{parser.get_parser_name()} 파싱 실패: {e}")
+        
+        return []
+    
+    def _hybrid_parsing(self, content: str, base_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        하이브리드 파싱: 구조적 분할 + 재귀적 분할
+        
+        Args:
+            content: 원본 내용
+            base_metadata: 기본 메타데이터
+            
+        Returns:
+            하이브리드 파싱 결과
+        """
+        print("하이브리드 파싱 시작: 구조적 분할 + 재귀적 분할")
+        
+        # 1단계: 구조적 시작점 찾기
+        structural_sections = self._find_structural_sections(content)
+        
+        if not structural_sections:
+            print("구조적 시작점 없음, LangChain RecursiveCharacterTextSplitter로 직접 분할")
+            return self._fallback_recursive_splitting(content, base_metadata)
+        
+        # 2단계: 각 구조적 섹션을 재귀적 분할기로 처리
+        final_chunks = []
+        chunk_index = 0
+        
+        for i, section in enumerate(structural_sections):
+            section_text = section["text"]
+            section_title = section["title"]
+            
+            # 섹션이 너무 크면 재귀적 분할기 적용
+            if len(section_text) > settings.chunk_size:
+                print(f"섹션 '{section_title}' 재귀적 분할: {len(section_text)}자")
+                section_chunks = self.text_splitter.split_text(section_text, {
+                    **base_metadata,
+                    "section_title": section_title,
+                    "section_index": i,
+                    "parser_type": "hybrid_recursive"
+                })
+                
+                # 청크 인덱스 재조정
+                for chunk in section_chunks:
+                    chunk["metadata"]["chunk_index"] = chunk_index
+                    chunk_index += 1
+                    final_chunks.append(chunk)
+            else:
+                # 섹션이 작으면 그대로 사용
+                chunk_metadata = {
+                    **base_metadata,
+                    "chunk_index": chunk_index,
+                    "section_title": section_title,
+                    "section_index": i,
+                    "parser_type": "hybrid_structural",
+                    "chunk_length": len(section_text)
+                }
+                
+                final_chunks.append({
+                    "text": section_text,
+                    "metadata": chunk_metadata
+                })
+                chunk_index += 1
+        
+        print(f"하이브리드 파싱 완료: {len(final_chunks)}개 청크")
+        return final_chunks
+    
+    def _find_structural_sections(self, content: str) -> List[Dict[str, Any]]:
+        """
+        구조적 시작점 찾기 (강화된 패턴 지원)
+        
+        Args:
+            content: 원본 내용
+            
+        Returns:
+            구조적 섹션 리스트
+        """
+        lines = content.split('\n')
+        sections = []
+        current_section = ""
+        current_title = "미분류"
+        
+        # 강화된 구조적 패턴
+        structural_patterns = [
+            r'^#{1,6}\s+(.+)$',           # 마크다운 제목
+            r'^\d+\.\s+(.+)$',            # 1. 제목
+            r'^\d+\.\d+\.\s+(.+)$',      # 1.1. 제목
+            r'^\d+\.\d+\.\d+\.\s+(.+)$', # 1.1.1. 제목
+            r'^\(\d+\)\s+(.+)$',          # (1) 제목
+            r'^\[\d+\]\s+(.+)$',          # [1] 제목
+            r'^[가-힣]+\.\s+(.+)$',        # 가. 제목
+            r'^\([가-힣]\)\s+(.+)$',       # 가) 제목
+            r'^ㄱ\.\s+(.+)$',              # ㄱ. 제목
+            r'^ㄱ\)\s+(.+)$',               # ㄱ) 제목
+            r'^[IVX]+\.\s+(.+)$',          # I. 제목
+        ]
+        
+        for line in lines:
+            line_stripped = line.strip()
+            
+            # 구조적 패턴 확인
+            is_structural = False
+            for pattern in structural_patterns:
+                match = re.match(pattern, line_stripped)
+                if match:
+                    # 이전 섹션 저장
+                    if current_section.strip():
+                        sections.append({
+                            "title": current_title,
+                            "text": current_section.strip()
+                        })
+                    
+                    # 새 섹션 시작
+                    current_title = match.group(1) if match.groups() else line_stripped
+                    current_section = line
+                    is_structural = True
+                    break
+            
+            if not is_structural:
+                # 일반 내용은 현재 섹션에 추가
+                if current_section:
+                    current_section += "\n" + line
+                else:
+                    current_section = line
+        
+        # 마지막 섹션 저장
+        if current_section.strip():
+            sections.append({
+                "title": current_title,
+                "text": current_section.strip()
+            })
+        
+        print(f"구조적 섹션 발견: {len(sections)}개")
+        return sections
+    
+    def _fallback_recursive_splitting(self, content: str, base_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        최후의 수단: LangChain RecursiveCharacterTextSplitter로 직접 분할
+        
+        Args:
+            content: 원본 내용
+            base_metadata: 기본 메타데이터
+            
+        Returns:
+            재귀적 분할 결과
+        """
+        print("최후의 수단: LangChain RecursiveCharacterTextSplitter 직접 분할")
+        return self.text_splitter.split_text(content, {
+            **base_metadata,
+            "parser_type": "recursive_fallback"
+        })
     
     def _get_parser_priority(self, parser: DocumentParser) -> int:
         """

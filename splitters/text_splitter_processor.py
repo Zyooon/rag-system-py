@@ -21,6 +21,7 @@ from abc import ABC, abstractmethod
 
 from config import settings
 from .text_splitter_config import TextSplitterConfig, SplitterSettings, SplitQuality
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # 로거 설정
 logger = logging.getLogger(__name__)
@@ -32,6 +33,15 @@ class TextSplitterProcessor:
     def __init__(self):
         self.chunk_size = settings.chunk_size
         self.chunk_overlap = settings.chunk_overlap
+        
+        # LangChain RecursiveCharacterTextSplitter 초기화
+        self.recursive_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+            separators=["\n\n", "\n", ". ", " ", ""],  # 문단 > 문장 > 단어 순서
+            length_function=len,
+            is_separator_regex=False
+        )
     
     # ==================== 기본 분할 메서드 ====================
     
@@ -102,7 +112,7 @@ class TextSplitterProcessor:
             return documents  # 실패 시 원본 반환
     
     def split_normal_document(self, document: Dict[str, Any], settings_config: SplitterSettings) -> List[Dict[str, Any]]:
-        """일반 문서 분할"""
+        """일반 문서 분할 - LangChain RecursiveCharacterTextSplitter 사용"""
         text = document.get("text", "")
         metadata = document.get("metadata", {})
         
@@ -112,9 +122,43 @@ class TextSplitterProcessor:
                 "metadata": {
                     **metadata,
                     "chunk_index": 0,
-                    "splitter_type": "no_split"
+                    "splitter_type": "no_split",
+                    "parser_type": "recursive"
                 }
             }]
+        
+        # LangChain RecursiveCharacterTextSplitter로 분할
+        try:
+            chunks = self.recursive_splitter.split_text(text)
+            result = []
+            
+            for i, chunk_text in enumerate(chunks):
+                if len(chunk_text.strip()) >= settings_config.min_chunk_size_chars:
+                    chunk_metadata = {
+                        **metadata,
+                        "chunk_index": i,
+                        "splitter_type": "recursive_character",
+                        "parser_type": "recursive",
+                        "chunk_length": len(chunk_text),
+                        "start_char": text.find(chunk_text) if i == 0 else "unknown",
+                        "end_char": text.find(chunk_text) + len(chunk_text) if i == 0 else "unknown"
+                    }
+                    
+                    result.append({
+                        "text": chunk_text.strip(),
+                        "metadata": chunk_metadata
+                    })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"RecursiveCharacterTextSplitter 실패, 기본 분할기로 전환: {e}")
+            return self._fallback_split_normal_document(document, settings_config)
+    
+    def _fallback_split_normal_document(self, document: Dict[str, Any], settings_config: SplitterSettings) -> List[Dict[str, Any]]:
+        """기본 분할기 (fallback)"""
+        text = document.get("text", "")
+        metadata = document.get("metadata", {})
         
         chunks = []
         start = 0
@@ -134,7 +178,8 @@ class TextSplitterProcessor:
                 chunk_metadata = {
                     **metadata,
                     "chunk_index": chunk_index,
-                    "splitter_type": "sentence_boundary",
+                    "splitter_type": "fallback_sentence_boundary",
+                    "parser_type": "fallback",
                     "start_char": start,
                     "end_char": end,
                     "chunk_length": len(chunk_text)
@@ -151,8 +196,6 @@ class TextSplitterProcessor:
             start = max(start + 1, end - self.chunk_overlap)
         
         return chunks
-    
-    # ==================== 테이블 문서 처리 ====================
     
     def is_table_document(self, document: Dict[str, Any]) -> bool:
         """테이블 문서인지 감지"""
@@ -341,17 +384,47 @@ class TextSplitterProcessor:
         return processed_documents
     
     def split_text(self, text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """텍스트를 청크로 분할 (기존 호환성)"""
+        """텍스트를 청크로 분할 - LangChain RecursiveCharacterTextSplitter 사용"""
         if not text or len(text) <= self.chunk_size:
             return [{
                 "text": text,
                 "metadata": {
                     **metadata,
                     "chunk_index": 0,
-                    "splitter_type": "no_split"
+                    "splitter_type": "no_split",
+                    "parser_type": "recursive"
                 }
             }]
         
+        # LangChain RecursiveCharacterTextSplitter로 분할
+        try:
+            chunks = self.recursive_splitter.split_text(text)
+            result = []
+            
+            for i, chunk_text in enumerate(chunks):
+                if chunk_text.strip():
+                    chunk_metadata = {
+                        **metadata,
+                        "chunk_index": i,
+                        "splitter_type": "recursive_character",
+                        "parser_type": "recursive",
+                        "start_char": text.find(chunk_text) if i == 0 else "unknown",
+                        "end_char": text.find(chunk_text) + len(chunk_text) if i == 0 else "unknown"
+                    }
+                    
+                    result.append({
+                        "text": chunk_text.strip(),
+                        "metadata": chunk_metadata
+                    })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"RecursiveCharacterTextSplitter 실패, 기본 분할기로 전환: {e}")
+            return self._fallback_split_text(text, metadata)
+    
+    def _fallback_split_text(self, text: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """기본 텍스트 분할기 (fallback)"""
         chunks = []
         start = 0
         chunk_index = 0
@@ -369,7 +442,8 @@ class TextSplitterProcessor:
                 chunk_metadata = {
                     **metadata,
                     "chunk_index": chunk_index,
-                    "splitter_type": "sentence_boundary",
+                    "splitter_type": "fallback_sentence_boundary",
+                    "parser_type": "fallback",
                     "start_char": start,
                     "end_char": end
                 }

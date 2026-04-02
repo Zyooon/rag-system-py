@@ -20,23 +20,41 @@ class HierarchicalParser(DocumentParser):
         self.current_h2 = ""  # 중제목 (Level 2)
         self.current_h3 = ""  # 소제목 (Level 3)
         
-        # 제목 패턴 정의 (마크다운 형식 우선) - 자바와 동일
+        # 제목 패턴 정의 (마크다운 형식 우선) - 강화된 계층 패턴
         self.heading_patterns = [
             # 마크다운 제목 형식 (우선순위 높음)
             re.compile(r"^###\s+(.+)$"),         # ### 소소제목
             re.compile(r"^##\s+(.+)$"),          # ## 소제목  
             re.compile(r"^#\s+(.+)$"),           # # 제목
             
+            # 강화된 계층 패턴 (숫자 및 괄호 패턴)
+            re.compile(r"^\d+\.\d+\.\d+\.\s+(.+)$"), # 1.1.1. 세부 소제목
+            re.compile(r"^\d+\.\d+\.\s+(.+)$"),      # 1.1. 중간 소제목
+            re.compile(r"^\d+\.\s+(.+)$"),           # 1. 메인 제목
+            re.compile(r"^\(\d+\)\s+(.+)$"),         # (1) 괄호 숫자 제목
+            re.compile(r"^\(\d+\.\d+\)\s+(.+)$"),   # (1.1) 괄호 계층 제목
+            re.compile(r"^\[\d+\]\s+(.+)$"),         # [1] 대괄호 숫자 제목
+            re.compile(r"^\[\d+\.\d+\]\s+(.+)$"),   # [1.1] 대괄호 계층 제목
+            
+            # 한글 계층 패턴
+            re.compile(r"^[가-힣]+\.\s+(.+)$"),       # 가. 나. 다. 한글 번호 제목
+            re.compile(r"^\([가-힣]\)\s+(.+)$"),      # 가) 나) 다) 한글 괄호 제목
+            re.compile(r"^ㄱ\.\s+(.+)$"),            # ㄱ. ㄴ. ㄷ. 자음 제목
+            re.compile(r"^ㄱ\)\s+(.+)$"),             # ㄱ) ㄴ) ㄷ) 자음 괄호 제목
+            
             # 마크다운 목록 형식
             re.compile(r"^-\s*\*\*(.+?)\*\*:\s*(.+)$"), # Markdown 굵은 글씨 항목
             re.compile(r"^-\s+(.+)$"),            # 일반 목록 항목
             
             # 기타 구조화된 형식
-            re.compile(r"^\d+\.\d+\.\s+(.+)$"), # 1.1. 소제목
-            re.compile(r"^\d+\.\s+(.+)$"),     # 1. 제목
-            re.compile(r"^\[(.+)\]$"),            # [제목] - 대괄호 제목
+            re.compile(r"^\[(.+)$"),            # [제목] - 대괄호 제목
             re.compile(r"^제목:\s*(.+)$"),       # 제목: 내용
-            re.compile(r"^\|.*\|$")            # 표 형식 (테이블)
+            re.compile(r"^\|.*\|$"),            # 표 형식 (테이블)
+            
+            # 로마 숫자 패턴
+            re.compile(r"^[IVX]+\.\s+(.+)$"),      # I. II. III. 로마숫자 제목
+            re.compile(r"^[ivx]+\.\s+(.+)$"),      # i. ii. iii. 소문자 로마숫자 제목
+            re.compile(r"^[IVX]+\)\s+(.+)$"),      # I) II) III) 로마숫자 괄호 제목
         ]
     
     def can_handle(self, content: str) -> bool:
@@ -52,11 +70,25 @@ class HierarchicalParser(DocumentParser):
         lines = content.split('\n')
         total_lines = len([l for l in lines if l.strip()])
         
-        if total_lines < 5:  # 너무 짧은 문서는 처리하지 않음
+        if total_lines < 3:  # 너무 짧은 문서는 처리하지 않음
             return False
         
-        # 불릿형 데이터 확인
+        # 불릿형 데이터 확인 (우선순위 높음)
         if self._contains_bullets_with_headers(content):
+            return True
+        
+        # 번호 목록 구조 확인 (1. 항목, 2. 항목...)
+        numbered_headers = 0
+        for line in lines:
+            if re.match(r'^\d+\.\s+.+$', line.strip()):
+                numbered_headers += 1
+        
+        # 번호 목록이 2개 이상이면 처리 가능
+        if numbered_headers >= 2:
+            return True
+        
+        # 테이블 구조 확인
+        if self._has_table_structure(content):
             return True
         
         # Markdown 형식 확인
@@ -64,7 +96,116 @@ class HierarchicalParser(DocumentParser):
             return True
         
         # 일반 구조화된 문서 확인
-        return any(self._is_heading(line) for line in lines if line.strip())
+        heading_count = sum(1 for line in lines if self._is_heading(line.strip()))
+        return heading_count >= 2
+    
+    def _has_table_structure(self, content: str) -> bool:
+        """
+        테이블 구조가 있는지 확인
+        
+        Args:
+            content: 확인할 내용
+            
+        Returns:
+            테이블 구조 여부
+        """
+        lines = content.split('\n')
+        table_rows = 0
+        has_header = False
+        
+        for line in lines:
+            trimmed = line.strip()
+            # 테이블 헤더 확인
+            if re.match(r'^\|.*\|$', trimmed):
+                table_rows += 1
+                if '---' in trimmed:  # 구분자 행
+                    has_header = True
+        
+        # 테이블 행이 3개 이상이고 헤더가 있으면 테이블로 인식
+        return table_rows >= 3 and has_header
+    
+    def _has_numbered_list_structure(self, content: str) -> bool:
+        """
+        번호 목록 구조가 있는지 확인
+        
+        Args:
+            content: 확인할 내용
+            
+        Returns:
+            번호 목록 구조 여부
+        """
+        lines = content.split('\n')
+        numbered_headers = 0
+        
+        for line in lines:
+            if re.match(r'^\d+\.\s+.+$', line.strip()):
+                numbered_headers += 1
+        
+        return numbered_headers >= 2
+    
+    def _parse_numbered_list(self, content: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        번호 목록 구조 파싱
+        
+        Args:
+            content: 파싱할 내용
+            metadata: 기본 메타데이터
+            
+        Returns:
+            파싱된 문서 목록
+        """
+        lines = content.split('\n')
+        result = []
+        
+        current_section = ""
+        current_header = ""
+        header_line_num = -1
+        
+        for i, line in enumerate(lines):
+            trimmed_line = line.strip()
+            
+            # 새로운 번호 섹션 확인
+            if re.match(r'^\d+\.\s+.+$', trimmed_line):
+                # 이전 섹션 저장
+                if current_section and current_header:
+                    chunk_metadata = metadata.copy()
+                    chunk_metadata.update({
+                        'title': self._extract_title(current_header),
+                        'header_line': header_line_num,
+                        'chunk_type': 'numbered_section'
+                    })
+                    
+                    result.append({
+                        'text': current_section.strip(),
+                        'metadata': chunk_metadata
+                    })
+                
+                # 새 섹션 시작
+                current_header = trimmed_line
+                current_section = line
+                header_line_num = i
+            elif current_header:
+                # 현재 섹션에 내용 추가
+                if current_section:
+                    current_section += "\n" + line
+                else:
+                    current_section = line
+        
+        # 마지막 섹션 저장
+        if current_section and current_header:
+            chunk_metadata = metadata.copy()
+            chunk_metadata.update({
+                'title': self._extract_title(current_header),
+                'header_line': header_line_num,
+                'chunk_type': 'numbered_section'
+            })
+            
+            result.append({
+                'text': current_section.strip(),
+                'metadata': chunk_metadata
+            })
+        
+        return result
     
     def parse(self, content: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -80,6 +221,14 @@ class HierarchicalParser(DocumentParser):
         # 불릿형 데이터를 위한 부모-자식 구조 파싱
         if self._contains_bullets_with_headers(content):
             return self._parse_bullet_with_header(content, metadata)
+        
+        # 번호 목록 구조 확인 및 처리
+        if self._has_numbered_list_structure(content):
+            return self._parse_numbered_list(content, metadata)
+        
+        # 테이블 구조 확인 및 처리
+        if self._has_table_structure(content):
+            return self._parse_table(content, metadata)
         
         # Markdown 형식 감지 및 처리
         if self._is_markdown_document(content):
@@ -99,13 +248,20 @@ class HierarchicalParser(DocumentParser):
         return False
     
     def _is_list_item(self, line: str) -> bool:
-        """라인이 목록 항목인지 확인"""
+        """라인이 목록 항목인지 확인 - 강화된 패턴"""
         if not line.strip():
             return False
         
-        # 목록 항목 패턴 확인 - 자바와 동일
+        # 목록 항목 패턴 확인 - 강화된 패턴
         return (re.match(r"^\-\s+(.+)$", line) or           # - 항목
                 re.match(r"^\d+\.\s+(.+)$", line) or      # 1. 항목
+                re.match(r"^\d+\.\d+\.\s+(.+)$", line) or # 1.1. 항목
+                re.match(r"^\(\d+\)\s+(.+)$", line) or    # (1) 항목
+                re.match(r"^\[\d+\]\s+(.+)$", line) or    # [1] 항목
+                re.match(r"^[가-힣]+\.\s+(.+)$", line) or  # 가. 항목
+                re.match(r"^\([가-힣]\)\s+(.+)$", line) or # 가) 항목
+                re.match(r"^ㄱ\.\s+(.+)$", line) or        # ㄱ. 항목
+                re.match(r"^ㄱ\)\s+(.+)$", line) or         # ㄱ) 항목
                 re.match(r"^\*\s+(.+)$", line) or          # * 항목
                 re.match(r"^•\s+(.+)$", line) or            # • 항목
                 line.startswith("- **") or                # - **굵은글씨**
@@ -234,13 +390,25 @@ class HierarchicalParser(DocumentParser):
             })
     
     def _extract_title(self, line: str) -> str:
-        """제목 추출 (자바와 동일)"""
-        # 번호 접두사 제거
-        title = re.sub(r'^\d+\.?\d*\.?\s*', '', line)
+        """제목 추출 - 강화된 패턴 지원"""
+        # 번호 접두사 제거 (다양한 패턴 지원)
+        title = re.sub(r"^[\d.]+\.?\s*", "", line)  # 1., 1.1., 1.1.1. 등
+        title = re.sub(r"^\(\d+\.?\d*\)\s*", "", title)  # (1), (1.1) 등
+        title = re.sub(r"^\[\d+\.?\d*\]\s*", "", title)  # [1], [1.1] 등
+        title = re.sub(r"^[가-힣]+\.\s*", "", title)    # 가., 나. 등
+        title = re.sub(r"^\([가-힣]\)\s*", "", title)    # 가), 나) 등
+        title = re.sub(r"^ㄱ\.\s*", "", title)          # ㄱ., ㄴ. 등
+        title = re.sub(r"^ㄱ\)\s*", "", title)            # ㄱ), ㄴ) 등
+        title = re.sub(r"^[IVXivx]+\.\s*", "", title)    # I., i., II. 등
+        title = re.sub(r"^[IVXivx]+\)\s*", "", title)    # I), i), II) 등
+        
         # 대괄호 제거
-        title = re.sub(r'^\[|\]$', '', title)
+        title = re.sub(r"^\[|\]$", "", title)
         # "제목:" 접두사 제거
-        title = re.sub(r'^제목:\s*', '', title)
+        title = re.sub(r"^제목:\s*", "", title)
+        # 마크다운 # 제거
+        title = re.sub(r"^#+\s*", "", title)
+        
         return title.strip()
     
     def _parse_markdown_document(self, content: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -388,3 +556,61 @@ class HierarchicalParser(DocumentParser):
     def get_parser_name(self) -> str:
         """파서 이름 반환"""
         return "hierarchical"
+    
+    def _parse_table(self, content: str, metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        테이블 구조 파싱
+        
+        Args:
+            content: 파싱할 내용
+            metadata: 기본 메타데이터
+            
+        Returns:
+            파싱된 문서 목록
+        """
+        lines = content.split('\n')
+        result = []
+        
+        # 헤더와 구분자 찾기
+        header_line = ""
+        separator_line = ""
+        data_rows = []
+        
+        for line in lines:
+            trimmed = line.strip()
+            if re.match(r'^\|.*\|$', trimmed):
+                if '---' in trimmed:
+                    separator_line = trimmed
+                elif not header_line:
+                    header_line = trimmed
+                else:
+                    data_rows.append(trimmed)
+        
+        # 헤더 청크 생성
+        if header_line:
+            chunk_metadata = metadata.copy()
+            chunk_metadata.update({
+                'title': '테이블 헤더',
+                'chunk_type': 'table_header'
+            })
+            
+            result.append({
+                'text': header_line + '\n' + separator_line,
+                'metadata': chunk_metadata
+            })
+        
+        # 데이터 행 청크 생성
+        for i, row in enumerate(data_rows):
+            chunk_metadata = metadata.copy()
+            chunk_metadata.update({
+                'title': f'테이블 데이터 {i+1}',
+                'chunk_type': 'table_row',
+                'row_index': i + 1
+            })
+            
+            result.append({
+                'text': row,
+                'metadata': chunk_metadata
+            })
+        
+        return result
