@@ -4,7 +4,7 @@ Java 프로젝트의 RagController와 유사한 기능 제공
 """
 
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Any
+from typing import Dict, Any, List
 import sys
 import os
 
@@ -97,17 +97,36 @@ class RagController:
                 status_code=400,
                 detail=MSG_DOCUMENT_RELOAD_FAILED + str(e)
             )
+    
+    async def get_documents_list(self) -> List[Dict[str, Any]]:
+        """저장된 문서 목록 조회"""
+        try:
+            return await self.rag_management_service.get_documents_list()
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"문서 목록 조회 실패: {str(e)}"
+            )
 
 
 # 컨트롤러 인스턴스
 rag_controller = RagController()
 
 
-@router.get("/")
-async def get_rag_status():
-    """RAG 시스템 상태 조회 엔드포인트"""
-    status = await rag_controller.get_status()
-    return RagResponse.success_response(MSG_REDIS_CONNECTION_CHECK, status)
+@router.get("/documents")
+async def get_documents_list():
+    """저장된 문서 목록 조회 엔드포인트"""
+    try:
+        document_list = await rag_controller.get_documents_list()
+        return RagResponse.success_response(f"{len(document_list)}개 파일의 문서를 찾았습니다", {
+            "total_count": len(document_list),
+            "documents": document_list
+        })
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"문서 목록 조회 실패: {str(e)}"
+        )
 
 
 @router.delete("/documents")

@@ -86,10 +86,8 @@ class RagManagementService:
         raw_documents = await self.load_raw_documents_from_folder(folder_path)
         
         if raw_documents:
-            # TextSplitterProcessor를 통한 일관된 문서 분할 및 파싱
-            processed_documents = self.text_splitter_processor.split_and_parse_documents(
-                raw_documents, self.parse_manager
-            )
+            # 기본 설정으로 문서 분할 (파일당 10-15개 청크)
+            processed_documents = self.text_splitter_processor.split_documents(raw_documents)
             
             # 벡터 저장소에 문서 추가
             try:
@@ -211,6 +209,42 @@ class RagManagementService:
             status[MAP_KEY_TOTAL_COUNT] = len(redis_keys)
         
         return status
+    
+    async def get_documents_list(self) -> List[Dict[str, Any]]:
+        """저장된 문서 목록을 파일별로 그룹화하여 반환 (파일명과 청크 수만)"""
+        try:
+            # Redis에 저장된 모든 문서 키 가져오기
+            documents = await self.redis_document_repository.get_all_document_keys()
+            
+            if not documents:
+                return []
+            
+            # 파일별로 그룹화
+            file_groups = {}
+            for key in documents:
+                # 키에서 파일명 추출 (rag:documents:filename:chunk_index 형식)
+                parts = key.split(':')
+                if len(parts) >= 3:
+                    filename = parts[2]  # rag:documents:filename:chunk_index
+                    
+                    if filename not in file_groups:
+                        file_groups[filename] = 0
+                    file_groups[filename] += 1
+            
+            # 파일별 정보 생성 (파일명과 청크 수만)
+            document_list = []
+            for filename, chunk_count in file_groups.items():
+                document_info = {
+                    "filename": filename,
+                    "total_chunks": chunk_count
+                }
+                document_list.append(document_info)
+            
+            return document_list
+            
+        except Exception as e:
+            print(f"문서 목록 조회 실패: {e}")
+            return []
     
     async def initialize_documents(self) -> None:
         """초기화 상태 확인"""
