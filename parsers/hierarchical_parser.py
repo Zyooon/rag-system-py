@@ -319,3 +319,12 @@ class HierarchicalParser(DocumentParser):
             'text': content,
             'metadata': metadata
         }
+    
+    def get_parser_name(self) -> str:
+        """
+        파서의 이름/타입을 반환
+        
+        Returns:
+            파서를 식별하는 고유한 이름
+        """
+        return "Hierarchical"

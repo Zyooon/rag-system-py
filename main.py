@@ -2,7 +2,14 @@
 # FastAPI 서버 및 컨트롤러 연결
 
 from fastapi import FastAPI
-from controllers import rag_router, search_router
+import sys
+import os
+
+# 프로젝트 루트 경로 추가
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from controllers.rag_controller import router as rag_router
+from controllers.search_controller import router as search_router
 
 app = FastAPI(
     title="RAG System API", 
@@ -23,6 +30,12 @@ async def root():
         "endpoints": {
             "rag_management": "/api/rag",
             "search": "/api/search",
+            "rag_status": "/api/rag/",
+            "search_query": "/api/search/",
+            "documents_list": "/api/search/documents",
+            "load_documents": "/api/rag/documents",
+            "reload_documents": "/api/rag/documents/reload",
+            "clear_documents": "/api/rag/documents",
             "docs": "/docs",
             "health": "/health"
         }

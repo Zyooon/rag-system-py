@@ -5,9 +5,14 @@ Java 프로젝트의 RagController와 유사한 기능 제공
 
 from fastapi import APIRouter, HTTPException
 from typing import Dict, Any
+import sys
+import os
 
-from dto import RagResponse
-from services import RagManagementService
+# 프로젝트 루트 경로 추가
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from dto.rag_response import RagResponse
+from services.rag_management_service import RagManagementService
 from constants import (
     MAP_KEY_MESSAGE, MAP_KEY_IS_INITIALIZED, MAP_KEY_LOADED_FILES,
     MAP_KEY_DOCUMENT_COUNT, MAP_KEY_TOTAL_COUNT, MAP_KEY_REDIS_CONNECTION,
@@ -119,7 +124,7 @@ async def clear_documents():
 
 @router.post("/documents")
 async def build_documents():
-    """문서 구축 엔드포인트"""
+    """문서 저장 엔드포인트"""
     result = await rag_controller.build_redis_vector_store()
     message = result.get(MAP_KEY_MESSAGE, "문서 저장 완료")
     return RagResponse.success_response(message, result)

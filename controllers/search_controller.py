@@ -5,9 +5,14 @@ Java 프로젝트의 SearchController와 유사한 기능 제공
 
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any
+import sys
+import os
 
-from dto import RagResponse, RagRequest, SourceInfo
-from services import SearchService
+# 프로젝트 루트 경로 추가
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from dto.rag_response import RagResponse, RagRequest, SourceInfo
+from services.search_service import SearchService
 from constants import MAP_KEY_ANSWER, MAP_KEY_SOURCES
 
 
@@ -69,8 +74,8 @@ async def ask_question(request: RagRequest):
     )
 
 
-@router.get("/debug/documents", response_model=List[Dict[str, Any]])
-async def get_all_documents_debug():
-    """Redis에 저장된 모든 문서를 조회하는 디버깅 엔드포인트"""
+@router.get("/documents", response_model=List[Dict[str, Any]])
+async def get_all_documents():
+    """Redis에 저장된 모든 문서를 조회하는 엔드포인트"""
     documents = await search_controller.get_all_documents()
     return documents
