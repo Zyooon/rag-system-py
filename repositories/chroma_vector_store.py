@@ -176,42 +176,50 @@ class ChromaVectorStore(VectorStoreRepository):
             print(f"문서 추가 실패: {e}")
             return False
     
-    async def similarity_search(self, query: str, k: int = 5, threshold: float = 0.3) -> List[Dict[str, Any]]:
+    async def similarity_search(self, query: str, k: int = 5, threshold: float = 0.3, 
+                           filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
-        유사도 기반 검색
+        유사도 기반 검색 (메타데이터 필터링 지원)
         
         Args:
             query: 검색 쿼리
             k: 반환할 최대 결과 수
             threshold: 유사도 임계값
+            filters: 메타데이터 필터링 조건
             
         Returns:
             유사한 문서 리스트
         """
         try:
             print(f"🔍 유사도 검색 시작: '{query}' (k={k}, threshold={threshold})")
+            if filters:
+                print(f"🎯 필터링 조건: {filters}")
             
-            # TODO: 실제 임베딩 모델로 쿼리 벡터화
-            # query_embedding = await self.embeddings.embed_query(query)
+            # ChromaDB 필터링 구성
+            chroma_filters = self._build_chroma_filters(filters) if filters else None
             
-            # 임시 구현 - 텍스트 기반 검색
+            # 필터링 적용 검색
             results = await asyncio.to_thread(
                 self.vector_store.similarity_search_with_score,
                 query,
-                k=k * 2  # 더 많은 결과를 가져와서 필터링
+                k=k * 2,  # 더 많은 결과를 가져와서 필터링
+                filter=chroma_filters
             )
             
             print(f"📊 ChromaDB에서 {len(results)}개 결과 반환")
             
-            # 임계값 필터링
+            # 임계값 필터링 및 점수 포맷팅
             filtered_results = []
             for doc, score in results:
-                print(f"📄 문서 점수: {score:.4f} (임계값: {threshold})")
-                if score >= threshold:
+                formatted_score = self._format_similarity_score(score)
+                
+                print(f"📄 문서 점수: {formatted_score:.4f} (임계값: {threshold})")
+                
+                if formatted_score >= threshold:
                     filtered_results.append({
                         "text": doc.page_content,
                         "metadata": doc.metadata,
-                        "similarity_score": float(score),
+                        "similarity_score": formatted_score,
                         "id": str(uuid.uuid4())
                     })
             
@@ -221,6 +229,83 @@ class ChromaVectorStore(VectorStoreRepository):
         except Exception as e:
             print(f"❌ 유사도 검색 실패: {e}")
             return []
+    
+    def _build_chroma_filters(self, filters: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        ChromaDB 필터링 조건 구성
+        
+        Args:
+            filters: 필터링 조건
+            
+        Returns:
+            ChromaDB 필터 객체
+        """
+        if not filters:
+            return None
+        
+        chroma_filters = {}
+        
+        # 파일명 필터링
+        if "filename" in filters:
+            filename = filters["filename"]
+            if isinstance(filename, str):
+                chroma_filters["filename"] = {"$eq": filename}
+            elif isinstance(filename, list):
+                chroma_filters["filename"] = {"$in": filename}
+        
+        # 파일 타입 필터링
+        if "file_type" in filters:
+            file_type = filters["file_type"]
+            if isinstance(file_type, str):
+                chroma_filters["file_type"] = {"$eq": file_type}
+            elif isinstance(file_type, list):
+                chroma_filters["file_type"] = {"$in": file_type}
+        
+        # 기간 필터링 (saved_at 기준)
+        if "date_range" in filters:
+            date_range = filters["date_range"]
+            if isinstance(date_range, dict):
+                start_date = date_range.get("start")
+                end_date = date_range.get("end")
+                
+                if start_date or end_date:
+                    date_filter = {}
+                    if start_date:
+                        date_filter["$gte"] = start_date
+                    if end_date:
+                        date_filter["$lte"] = end_date
+                    chroma_filters["saved_at"] = date_filter
+        
+        # 청크 타입 필터링
+        if "chunk_type" in filters:
+            chunk_type = filters["chunk_type"]
+            if isinstance(chunk_type, str):
+                chroma_filters["chunk_type"] = {"$eq": chunk_type}
+            elif isinstance(chunk_type, list):
+                chroma_filters["chunk_type"] = {"$in": chunk_type}
+        
+        # 유사도 점수 필터링 (저장 시점)
+        if "min_score" in filters:
+            min_score = filters["min_score"]
+            chroma_filters["vector_score"] = {"$gte": float(min_score)}
+        
+        return chroma_filters if chroma_filters else None
+    
+    def _format_similarity_score(self, score: float) -> float:
+        """
+        유사도 점수 포맷팅 (소수점 2자리)
+        
+        Args:
+            score: 원본 점수
+            
+        Returns:
+            포맷팅된 점수
+        """
+        try:
+            # 소수점 2자리로 반올림
+            return round(float(score), 2)
+        except (ValueError, TypeError):
+            return 0.0
     
     async def clear(self) -> bool:
         """

@@ -106,11 +106,26 @@ class SourceInfo(BaseModel):
         
         print(f"Final SourceInfo - filename: '{filename}', content: '{document_title}'")
         
-        # 점수 및 ID 설정
+        # 점수 및 ID 설정 (이미 포맷팅된 점수 사용)
         similarity_score = document.get("similarity_score", 0.0)
-        # 소수점 2자리까지 포맷팅
+        
+        # 점수가 이미 포맷팅되었는지 확인하고, 아니면 포맷팅
         if similarity_score is not None:
+            if isinstance(similarity_score, str):
+                try:
+                    similarity_score = float(similarity_score)
+                except ValueError:
+                    similarity_score = 0.0
+            
+            # 소수점 2자리로 포맷팅 (이미 포맷팅되었더라도 안전하게 처리)
             similarity_score = round(float(similarity_score), 2)
+        
+        # 임계값 체크 (설정된 임계값과 비교)
+        from config import settings
+        search_threshold = getattr(settings, 'search_threshold', 0.3)
+        
+        if similarity_score < search_threshold:
+            print(f"⚠️ 낮은 유사도 점수: {similarity_score:.2f} < 임계값 {search_threshold}")
         
         chunk_id = metadata.get("chunk_id")
         if chunk_id is not None:

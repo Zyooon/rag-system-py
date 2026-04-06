@@ -105,10 +105,13 @@ class RedisSearchRepository:
             logger.error(f"Redis 키 조회 실패: {e}")
             return []
     
-    async def get_all_documents(self) -> List[Dict[str, Any]]:
+    async def get_all_documents(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
-        Redis에 저장된 모든 문서 조회
+        Redis에 저장된 모든 문서 조회 (필터링 지원)
         
+        Args:
+            filters: 메타데이터 필터링 조건
+            
         Returns:
             문서 목록
         """
@@ -125,14 +128,92 @@ class RedisSearchRepository:
             for key in keys:
                 doc = await self.get_document(key)
                 if doc:
-                    documents.append(doc)
+                    # 필터링 적용
+                    if self._apply_filters(doc, filters):
+                        documents.append(doc)
             
-            logger.info(f"Redis에서 {len(documents)}개의 문서를 조회했습니다")
+            logger.info(f"Redis에서 {len(documents)}개의 문서를 조회했습니다 (필터링 적용)")
             return documents
             
         except Exception as e:
             logger.error(f"Redis 문서 목록 조회 실패: {e}")
             return []
+    
+    def _apply_filters(self, doc: Dict[str, Any], filters: Optional[Dict[str, Any]]) -> bool:
+        """
+        문서 필터링 적용
+        
+        Args:
+            doc: 문서 데이터
+            filters: 필터링 조건
+            
+        Returns:
+            필터링 통과 여부
+        """
+        if not filters:
+            return True
+        
+        metadata = doc.get("metadata", {})
+        
+        # 파일명 필터링
+        if "filename" in filters:
+            filename_filter = filters["filename"]
+            doc_filename = metadata.get("filename", "")
+            
+            if isinstance(filename_filter, str):
+                if doc_filename != filename_filter:
+                    return False
+            elif isinstance(filename_filter, list):
+                if doc_filename not in filename_filter:
+                    return False
+        
+        # 파일 타입 필터링
+        if "file_type" in filters:
+            file_type_filter = filters["file_type"]
+            doc_file_type = metadata.get("file_type", "")
+            
+            if isinstance(file_type_filter, str):
+                if doc_file_type != file_type_filter:
+                    return False
+            elif isinstance(file_type_filter, list):
+                if doc_file_type not in file_type_filter:
+                    return False
+        
+        # 청크 타입 필터링
+        if "chunk_type" in filters:
+            chunk_type_filter = filters["chunk_type"]
+            doc_chunk_type = metadata.get("chunk_type", "")
+            
+            if isinstance(chunk_type_filter, str):
+                if doc_chunk_type != chunk_type_filter:
+                    return False
+            elif isinstance(chunk_type_filter, list):
+                if doc_chunk_type not in chunk_type_filter:
+                    return False
+        
+        # 기간 필터링
+        if "date_range" in filters:
+            date_range = filters["date_range"]
+            if isinstance(date_range, dict):
+                saved_at = metadata.get("saved_at", "")
+                start_date = date_range.get("start")
+                end_date = date_range.get("end")
+                
+                if saved_at and (start_date or end_date):
+                    if start_date and saved_at < start_date:
+                        return False
+                    if end_date and saved_at > end_date:
+                        return False
+        
+        # 최소 점수 필터링
+        if "min_score" in filters:
+            min_score = filters["min_score"]
+            doc_score = float(doc.get("similarity_score", 0.0))
+            
+            if doc_score < float(min_score):
+                return False
+        
+        return True
     
     async def get_document(self, key: str) -> Dict[str, Any]:
         """

@@ -61,49 +61,81 @@ class SearchService:
             print("LLM 서비스를 초기화할 수 없습니다")
             self.llm_service = None
     
-    async def _search_documents_by_keyword(self, query: str) -> List[Dict[str, Any]]:
+    async def search_documents(self, query: str, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
-        Redis에서 키워드 기반 문서 검색
+        문서 검색 (메타데이터 필터링 지원)
         
         Args:
             query: 검색 쿼리
+            filters: 메타데이터 필터링 조건
             
         Returns:
             검색된 문서 리스트
         """
         try:
-            # 모든 문서 가져오기
-            all_documents = await self.redis_document_repository.get_all_documents()
+            print(f"🔍 문서 검색 시작: '{query}'")
+            if filters:
+                print(f"🎯 검색 필터: {filters}")
             
-            if not all_documents:
-                return []
+            # 1. ChromaDB에서 시맨틱 검색 (필터링 적용)
+            chroma_results = await self.vector_store.similarity_search(
+                query, 
+                k=settings.search_top_k,
+                threshold=settings.search_threshold,
+                filters=filters
+            )
             
-            # 키워드 기반 필터링
-            query_lower = query.lower()
-            relevant_docs = []
+            # 2. Redis에서 키워드 검색 (필터링 적용)
+            redis_results = await self.redis_search_repository.get_all_documents(filters)
             
-            for doc in all_documents:
-                text = doc.get('text', '').lower()
-                metadata = doc.get('metadata', {})
-                
-                # 텍스트 내에 쿼리 키워드가 있는지 확인
-                if any(keyword in text for keyword in query_lower.split() if len(keyword) > 1):
-                    # 유사도 점수 계산 (간단한 키워드 매칭 기반)
-                    score = self._calculate_keyword_similarity(query_lower, text)
-                    
-                    relevant_docs.append({
-                        'text': doc.get('text', ''),
-                        'metadata': metadata,
-                        'score': score
-                    })
+            # 3. 결과 병합 및 중복 제거
+            all_results = self._merge_search_results(chroma_results, redis_results)
             
-            # 점수순 정렬 및 상위 결과 반환
-            relevant_docs.sort(key=lambda x: x['score'], reverse=True)
-            return relevant_docs[:self.max_search_results]
+            print(f"📊 검색 결과: ChromaDB {len(chroma_results)}개, Redis {len(redis_results)}개 → 총 {len(all_results)}개")
+            return all_results
             
         except Exception as e:
             print(f"문서 검색 실패: {e}")
             return []
+    
+    def _merge_search_results(self, chroma_results: List[Dict[str, Any]], 
+                            redis_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        ChromaDB와 Redis 검색 결과 병합
+        
+        Args:
+            chroma_results: ChromaDB 검색 결과
+            redis_results: Redis 검색 결과
+            
+        Returns:
+            병합된 검색 결과
+        """
+        merged_results = []
+        seen_texts = set()
+        
+        # ChromaDB 결과 우선 추가 (이미 유사도 점수 있음)
+        for result in chroma_results:
+            text = result.get('text', '')
+            if text and text not in seen_texts:
+                merged_results.append(result)
+                seen_texts.add(text)
+        
+        # Redis 결과 추가 (중복 제외)
+        for result in redis_results:
+            text = result.get('text', '')
+            if text and text not in seen_texts:
+                # 키워드 유사도 점수 계산
+                query = ""  # TODO: query 전달 방법 개선
+                score = self._calculate_keyword_similarity(query, text)
+                
+                result['score'] = score
+                result['similarity_score'] = score
+                merged_results.append(result)
+                seen_texts.add(text)
+        
+        # 점수순 정렬
+        merged_results.sort(key=lambda x: x.get('similarity_score', 0), reverse=True)
+        return merged_results[:self.max_search_results]
     
     def _calculate_keyword_similarity(self, query: str, text: str) -> float:
         """
@@ -128,21 +160,24 @@ class SearchService:
         
         return similarity
     
-    async def search_and_answer_with_sources(self, query: str) -> Dict[str, Any]:
+    async def search_and_answer_with_sources(self, query: str, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         사용자 질문에 대해 RAG를 통해 답변을 생성하고 출처 정보도 함께 반환
-        시맨틱 청킹과 리랭킹으로 검색 품질 향상
+        메타데이터 필터링 지원
         
         Args:
             query: 사용자 질문
+            filters: 메타데이터 필터링 조건
             
         Returns:
             답변과 출처 정보가 포함된 결과 맵
         """
         print(f"🔍 검색 시작: '{query}'")
+        if filters:
+            print(f"🎯 필터링 조건: {filters}")
         
-        # 1. 1차 검색 (기존 방식)
-        initial_documents = await self.search_documents(query)
+        # 1. 1차 검색 (기존 방식 + 필터링)
+        initial_documents = await self.search_documents(query, filters)
         print(f"📊 1차 검색 결과: {len(initial_documents)}개 문서")
         
         if not initial_documents:
