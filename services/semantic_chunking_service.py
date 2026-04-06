@@ -23,9 +23,9 @@ class SemanticChunkingService:
         # 임베딩 모델 로드 (한국어 지원)
         try:
             self.embedding_model = SentenceTransformer('jhgan/ko-sroberta-multitask')
-            logger.info("✅ 시맨틱 청킹 모델 로드 완료")
+            logger.info("[OK] 시맨틱 청킹 모델 로드 완료")
         except Exception as e:
-            logger.error(f"❌ 시맨틱 청킹 모델 로드 실패: {e}")
+            logger.error(f"[FAIL] 시맨틱 청킹 모델 로드 실패: {e}")
             self.embedding_model = None
         
         # 기본 텍스트 분할기

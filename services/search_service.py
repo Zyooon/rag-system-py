@@ -32,19 +32,19 @@ class SearchService:
         if settings.enable_semantic_chunking:
             from .semantic_chunking_service import SemanticChunkingService
             self.semantic_chunking_service = SemanticChunkingService()
-            print("✅ 시맨틱 청킹 서비스 활성화")
+            print("[OK] 시맨틱 청킹 서비스 활성화")
         else:
             self.semantic_chunking_service = None
-            print("❌ 시맨틱 청킹 서비스 비활성화")
+            print("[FAIL] 시맨틱 청킹 서비스 비활성화")
         
         # 리랭킹 서비스
         if settings.enable_reranking:
             from .reranking_service import RerankingService
             self.reranking_service = RerankingService()
-            print("✅ 리랭킹 서비스 활성화")
+            print("[OK] 리랭킹 서비스 활성화")
         else:
             self.reranking_service = None
-            print("❌ 리랭킹 서비스 비활성화")
+            print("[FAIL] 리랭킹 서비스 비활성화")
         
         # LLM 서비스 초기화 (순환 임포트 방지)
         self._initialize_llm_service()
@@ -73,9 +73,9 @@ class SearchService:
             검색된 문서 리스트
         """
         try:
-            print(f"🔍 문서 검색 시작: '{query}'")
+            print(f"[SEARCH] 문서 검색 시작: '{query}'")
             if filters:
-                print(f"🎯 검색 필터: {filters}")
+                print(f"[TARGET] 검색 필터: {filters}")
             
             # 1. ChromaDB에서 시맨틱 검색 (필터링 적용)
             chroma_results = await self.vector_store.similarity_search(
@@ -91,7 +91,7 @@ class SearchService:
             # 3. 결과 병합 및 중복 제거
             all_results = self._merge_search_results(chroma_results, redis_results)
             
-            print(f"📊 검색 결과: ChromaDB {len(chroma_results)}개, Redis {len(redis_results)}개 → 총 {len(all_results)}개")
+            print(f"[STATS] 검색 결과: ChromaDB {len(chroma_results)}개, Redis {len(redis_results)}개 → 총 {len(all_results)}개")
             return all_results
             
         except Exception as e:
@@ -185,22 +185,22 @@ class SearchService:
                 filter_request = FilterRequest(**filters)
                 validated_filters = filter_request.model_dump(exclude_none=True)
             
-            print(f"🔍 Pydantic 검증 통과: '{rag_request.query}'")
+            print(f"[SEARCH] Pydantic 검증 통과: '{rag_request.query}'")
             if validated_filters:
-                print(f"🎯 필터링 조건 검증 통과: {validated_filters}")
+                print(f"[TARGET] 필터링 조건 검증 통과: {validated_filters}")
             
         except Exception as e:
-            print(f"❌ Pydantic 검증 실패: {e}")
+            print(f"[FAIL] Pydantic 검증 실패: {e}")
             # 검증 실패 시 기본값으로 진행
             validated_filters = None
         
-        print(f"🔍 검색 시작: '{query}'")
+        print(f"[SEARCH] 검색 시작: '{query}'")
         if validated_filters:
-            print(f"🎯 필터링 조건: {validated_filters}")
+            print(f"[TARGET] 필터링 조건: {validated_filters}")
         
         # 1. 1차 검색 (기존 방식 + 필터링)
         initial_documents = await self.search_documents(query, validated_filters)
-        print(f"📊 1차 검색 결과: {len(initial_documents)}개 문서")
+        print(f"[STATS] 1차 검색 결과: {len(initial_documents)}개 문서")
         
         if not initial_documents:
             return {
@@ -211,11 +211,11 @@ class SearchService:
         # 2. 리랭킹 적용
         if self.reranking_service:
             reranked_documents = await self.reranking_service.rerank_documents(query, initial_documents)
-            print(f"🎯 리랭킹 결과: {len(reranked_documents)}개 문서")
+            print(f"[TARGET] 리랭킹 결과: {len(reranked_documents)}개 문서")
             
             # 리랭킹 통계 출력
             stats = await self.reranking_service.get_reranking_stats(query, initial_documents)
-            print(f"📈 리랭킹 통계: 평균 점수 {stats.get('reranked_avg_score', 0):.3f}")
+            print(f"[UP] 리랭킹 통계: 평균 점수 {stats.get('reranked_avg_score', 0):.3f}")
         else:
             reranked_documents = initial_documents
             print("⚠️ 리랭킹 스킵")
@@ -256,7 +256,7 @@ class SearchService:
             # 7. 최적 출처 선택 (리랭킹 점수 고려)
             best_source = self._find_best_matching_source_with_reranking(answer, filtered_docs, sources)
             
-            print(f"✅ 최종 출처: {best_source.filename} (점수: {best_source.similarity_score:.3f})")
+            print(f"[OK] 최종 출처: {best_source.filename} (점수: {best_source.similarity_score:.3f})")
             
             return {
                 MAP_KEY_ANSWER: answer,
@@ -292,10 +292,10 @@ class SearchService:
                 if chunk_key not in seen_chunks:
                     sources.append(source_info)
                     seen_chunks.add(chunk_key)
-                    print(f"✅ 출처 정보 검증 통과: {source_info.filename}")
+                    print(f"[OK] 출처 정보 검증 통과: {source_info.filename}")
                 
             except Exception as e:
-                print(f"❌ 출처 정보 검증 실패: {e}")
+                print(f"[FAIL] 출처 정보 검증 실패: {e}")
                 # 검증 실패 시 기본값으로 생성
                 try:
                     fallback_source = SourceInfo(
@@ -305,7 +305,7 @@ class SearchService:
                     )
                     sources.append(fallback_source)
                 except Exception as fallback_error:
-                    print(f"❌ 기본 출처 정보 생성 실패: {fallback_error}")
+                    print(f"[FAIL] 기본 출처 정보 생성 실패: {fallback_error}")
         
         return sources
     

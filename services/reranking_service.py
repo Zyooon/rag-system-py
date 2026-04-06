@@ -21,9 +21,9 @@ class RerankingService:
         # Cross-Encoder 모델 로드 (한국어 지원)
         try:
             self.cross_encoder = CrossEncoder('jhgan/ko-sroberta-multitask')
-            logger.info("✅ Cross-Encoder 리랭커 로드 완료")
+            logger.info("[OK] Cross-Encoder 리랭커 로드 완료")
         except Exception as e:
-            logger.error(f"❌ Cross-Encoder 리랭커 로드 실패: {e}")
+            logger.error(f"[FAIL] Cross-Encoder 리랭커 로드 실패: {e}")
             self.cross_encoder = None
         
         # 리랭킹 설정
@@ -58,7 +58,7 @@ class RerankingService:
             # 4. 임계값 필터링
             filtered_docs = self._filter_by_threshold(reranked_docs)
             
-            logger.info(f"🎯 리랭킹 완료: {len(documents)} → {len(filtered_docs)}개 문서")
+            logger.info(f"[TARGET] 리랭킹 완료: {len(documents)} → {len(filtered_docs)}개 문서")
             return filtered_docs
             
         except Exception as e:

@@ -25,10 +25,19 @@ redis_search_repository = RedisSearchRepository()
 
 
 @router.post("", response_model=RagResponse)
-async def ask_question(request: RagRequest, filters: Optional[Dict[str, Any]] = None):
+async def ask_question(request: RagRequest, filters: Optional[str] = None):
     """사용자 질문에 대해 RAG를 통해 답변을 생성하는 엔드포인트 (필터링 지원)"""
     try:
-        result = await search_service.search_and_answer_with_sources(request.query, filters)
+        # JSON 문자열을 딕셔너리로 변환
+        parsed_filters = None
+        if filters:
+            import json
+            try:
+                parsed_filters = json.loads(filters)
+            except json.JSONDecodeError:
+                parsed_filters = None
+        
+        result = await search_service.search_and_answer_with_sources(request.query, parsed_filters)
         
         sources = None
         if result.get("sources"):
@@ -39,7 +48,7 @@ async def ask_question(request: RagRequest, filters: Optional[Dict[str, Any]] = 
                 sources = result["sources"]
         
         return RagResponse.success_response(
-            message=result["answer"],
+            message="검색 완료",
             data=result,
             sources=sources
         )

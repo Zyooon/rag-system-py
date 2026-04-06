@@ -131,7 +131,7 @@ class RAGAPITester:
         
         passed = 0
         for test_name, result in results:
-            status = "✅ 통과" if result else "❌ 실패"
+            status = "[OK] 통과" if result else "[FAIL] 실패"
             print(f"{test_name:.<30} {status}")
             if result:
                 passed += 1
@@ -162,7 +162,7 @@ async def main():
     else:
         success = await tester.run_all_tests()
         if success:
-            print("\n🎉 모든 테스트 통과!")
+            print("\n[SUCCESS] 모든 테스트 통과!")
         else:
             print("\n⚠️ 일부 테스트 실패")
 

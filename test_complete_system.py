@@ -128,23 +128,23 @@ class RAGSystemTester:
         
         # 문서 저장 결과
         saved_count = save_result.get('saved_count', 0)
-        print(f"문서 저장: {'✅ 성공' if saved_count > 0 else '❌ 실패'} ({saved_count}개)")
+        print(f"문서 저장: {'[OK] 성공' if saved_count > 0 else '[FAIL] 실패'} ({saved_count}개)")
         
         # 시스템 상태
         is_initialized = status.get('is_initialized', False)
-        print(f"시스템 초기화: {'✅ 완료' if is_initialized else '❌ 미완료'}")
+        print(f"시스템 초기화: {'[OK] 완료' if is_initialized else '[FAIL] 미완료'}")
         
         # 검색 결과
         successful_searches = sum(1 for r in search_results if '오류' not in r.get('answer', ''))
-        print(f"검색 기능: {'✅ 정상' if successful_searches > 0 else '❌ 실패'} ({successful_searches}/{len(search_results)} 성공)")
+        print(f"검색 기능: {'[OK] 정상' if successful_searches > 0 else '[FAIL] 실패'} ({successful_searches}/{len(search_results)} 성공)")
         
         # 문서 삭제 결과
         total_deleted = clear_result.get('total_deleted', 0)
-        print(f"문서 삭제: {'✅ 성공' if total_deleted >= 0 else '❌ 실패'} ({total_deleted}개 삭제)")
+        print(f"문서 삭제: {'[OK] 성공' if total_deleted >= 0 else '[FAIL] 실패'} ({total_deleted}개 삭제)")
         
         # 최종 상태
         final_initialized = final_status.get('is_initialized', False)
-        print(f"최종 상태: {'✅ 정상' if not final_initialized else '⚠️ 초기화됨'}")
+        print(f"최종 상태: {'[OK] 정상' if not final_initialized else '⚠️ 초기화됨'}")
         
         print("="*60)
 

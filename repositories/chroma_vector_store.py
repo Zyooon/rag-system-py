@@ -39,23 +39,26 @@ class ChromaVectorStore(VectorStoreRepository):
                     self.async_service = async_service
                 
                 def embed_documents(self, texts):
-                    """동기 임베딩 래퍼"""
+                    """동기 문서 임베딩 래퍼"""
                     try:
-                        # 이미 이벤트 루프가 있는 경우
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
-                            # 루프가 실행 중이면 새 스레드에서 실행
+                            # 이벤트 루프가 실행 중이면 스레드 풀 사용
                             import concurrent.futures
                             with concurrent.futures.ThreadPoolExecutor() as executor:
-                                future = executor.submit(asyncio.run, self.async_service.embed_documents(texts))
+                                future = executor.submit(self._run_embed_documents, texts)
                                 return future.result()
                         else:
                             # 루프가 없으면 직접 실행
-                            return asyncio.run(self.async_service.embed_documents(texts))
+                            return self._run_embed_documents(texts)
                     except Exception as e:
                         print(f"동기 임베딩 실패: {e}")
                         # 실패 시 더미 벡터 반환
                         return [[0.0] * 768 for _ in texts]
+                
+                def _run_embed_documents(self, texts):
+                    """embed_documents를 동기적으로 실행"""
+                    return asyncio.run(self.async_service.embed_documents(texts))
                 
                 def embed_query(self, text):
                     """동기 쿼리 임베딩 래퍼"""
@@ -191,9 +194,9 @@ class ChromaVectorStore(VectorStoreRepository):
             유사한 문서 리스트
         """
         try:
-            print(f"🔍 유사도 검색 시작: '{query}' (k={k}, threshold={threshold})")
+            print(f"[SEARCH] 유사도 검색 시작: '{query}' (k={k}, threshold={threshold})")
             if filters:
-                print(f"🎯 필터링 조건: {filters}")
+                print(f"[TARGET] 필터링 조건: {filters}")
             
             # ChromaDB 필터링 구성
             chroma_filters = self._build_chroma_filters(filters) if filters else None
@@ -206,7 +209,7 @@ class ChromaVectorStore(VectorStoreRepository):
                 filter=chroma_filters
             )
             
-            print(f"📊 ChromaDB에서 {len(results)}개 결과 반환")
+            print(f"[STATS] ChromaDB에서 {len(results)}개 결과 반환")
             
             # 임계값 필터링 및 점수 포맷팅
             filtered_results = []
@@ -223,11 +226,11 @@ class ChromaVectorStore(VectorStoreRepository):
                         "id": str(uuid.uuid4())
                     })
             
-            print(f"✅ 최종 {len(filtered_results)}개 문서 통과 (임계값 {threshold} 이상)")
+            print(f"[OK] 최종 {len(filtered_results)}개 문서 통과 (임계값 {threshold} 이상)")
             return filtered_results
             
         except Exception as e:
-            print(f"❌ 유사도 검색 실패: {e}")
+            print(f"[FAIL] 유사도 검색 실패: {e}")
             return []
     
     def _build_chroma_filters(self, filters: Dict[str, Any]) -> Optional[Dict[str, Any]]:

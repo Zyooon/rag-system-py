@@ -58,12 +58,12 @@ class EmbeddingService(Embeddings):
             if not test_vector or all(v == 0 for v in test_vector):
                 raise Exception("임베딩 결과가 유효하지 않음")
             
-            print(f"✅ Ollama 임베딩 모델 초기화 완료: {self.embedding_model}")
+            print(f"[OK] Ollama 임베딩 모델 초기화 완료: {self.embedding_model}")
             print(f"벡터 차원: {len(test_vector)}")
             print(f"테스트 벡터 샘플: {test_vector[:3]}...")
             
         except Exception as e:
-            print(f"❌ Ollama 임베딩 모델 초기화 실패: {e}")
+            print(f"[FAIL] Ollama 임베딩 모델 초기화 실패: {e}")
             print("해결 방안:")
             print(f"1. Ollama 서버가 실행 중인지 확인: {self.base_url}")
             print(f"2. 모델 설치: ollama pull {self.embedding_model}")
@@ -127,7 +127,7 @@ class EmbeddingService(Embeddings):
         # 텍스트를 배치로 분할
         batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
         
-        print(f"🚀 병렬 임베딩 시작: {len(texts)}개 텍스트 → {len(batches)}개 배치 (크기: {batch_size})")
+        print(f"[FAST] 병렬 임베딩 시작: {len(texts)}개 텍스트 → {len(batches)}개 배치 (크기: {batch_size})")
         
         # 병렬 처리
         tasks = []
@@ -145,7 +145,7 @@ class EmbeddingService(Embeddings):
         all_vectors = []
         for i, result in enumerate(batch_results):
             if isinstance(result, Exception):
-                print(f"❌ 배치 {i} 처리 실패: {result}")
+                print(f"[FAIL] 배치 {i} 처리 실패: {result}")
                 # 실패한 배치는 더미 벡터로 대체
                 batch_size_actual = len(batches[i])
                 dummy_vectors = [[0.0] * 768 for _ in range(batch_size_actual)]
@@ -154,7 +154,7 @@ class EmbeddingService(Embeddings):
                 all_vectors.extend(result)
         
         end_time = time.time()
-        print(f"✅ 병렬 임베딩 완료: {len(all_vectors)}개 벡터 ({end_time - start_time:.2f}초)")
+        print(f"[OK] 병렬 임베딩 완료: {len(all_vectors)}개 벡터 ({end_time - start_time:.2f}초)")
         
         return all_vectors
     
@@ -175,10 +175,10 @@ class EmbeddingService(Embeddings):
                 self.embeddings.embed_documents,
                 batch
             )
-            print(f"✅ 배치 {batch_index} 완료: {len(vectors)}개 벡터")
+            print(f"[OK] 배치 {batch_index} 완료: {len(vectors)}개 벡터")
             return vectors
         except Exception as e:
-            print(f"❌ 배치 {batch_index} 실패: {e}")
+            print(f"[FAIL] 배치 {batch_index} 실패: {e}")
             raise
     
     async def embed_query(self, text: str) -> List[float]:

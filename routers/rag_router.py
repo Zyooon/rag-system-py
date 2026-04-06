@@ -150,9 +150,9 @@ async def _reload_documents_background():
     try:
         clear_result = await rag_management_service.clear_store()
         await rag_management_service.initialize_documents()
-        print(f"✅ 백그라운드 문서 재로드 완료: {clear_result.get(MAP_KEY_TOTAL_DELETED, 0)}개 파일 삭제 후 재로드")
+        print(f"[OK] 백그라운드 문서 재로드 완료: {clear_result.get(MAP_KEY_TOTAL_DELETED, 0)}개 파일 삭제 후 재로드")
     except Exception as e:
-        print(f"❌ 백그라운드 문서 재로드 실패: {e}")
+        print(f"[FAIL] 백그라운드 문서 재로드 실패: {e}")
 
 
 @router.get("/status")

@@ -40,10 +40,10 @@ class RagManagementService:
         if settings.enable_semantic_chunking:
             from .semantic_chunking_service import SemanticChunkingService
             self.semantic_chunking_service = SemanticChunkingService()
-            print("✅ RAG 관리: 시맨틱 청킹 서비스 활성화")
+            print("RAG 관리: 시맨틱 청킹 서비스 활성화")
         else:
             self.semantic_chunking_service = None
-            print("❌ RAG 관리: 시맨틱 청킹 서비스 비활성화")
+            print("RAG 관리: 시맨틱 청킹 서비스 비활성화")
         
         # 벡터 저장소 초기화 (순환 임포트 방지)
         from repositories import ChromaVectorStore
@@ -110,7 +110,7 @@ class RagManagementService:
                 print(f"🧠 시맨틱 청킹 적용: {len(processed_documents)}개 문서")
                 semantic_chunks = await self.semantic_chunking_service.batch_semantic_chunk(processed_documents)
                 processed_documents = semantic_chunks
-                print(f"🎯 시맨틱 청킹 결과: {len(processed_documents)}개 청크")
+                print(f"[TARGET] 시맨틱 청킹 결과: {len(processed_documents)}개 청크")
             else:
                 print("⚠️ 시맨틱 청킹 스킵")
             
