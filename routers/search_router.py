@@ -11,7 +11,7 @@ import os
 # 프로젝트 루트 경로 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dto.rag_response import RagResponse, RagRequest, SourceInfo
+from dto.rag_response import RagResponse, RagRequest, SourceInfo, FilteredSearchRequest, SearchStats
 from services.search_service import SearchService
 from repositories import RedisSearchRepository
 from constants import MAP_KEY_ANSWER, MAP_KEY_SOURCES
@@ -51,10 +51,25 @@ async def ask_question(request: RagRequest, filters: Optional[Dict[str, Any]] = 
 
 
 @router.post("/filtered", response_model=RagResponse)
-async def search_with_filters(request: RagRequest, filters: Dict[str, Any]):
-    """필터링 조건으로 검색하는 엔드포인트"""
+async def search_with_filters(request: FilteredSearchRequest):
+    """필터링 조건으로 검색하는 엔드포인트 (Pydantic 검증 강화)"""
     try:
+        import time
+        start_time = time.time()
+        
+        # Pydantic 모델에서 필터링 조건 추출
+        filters = request.filters.model_dump(exclude_none=True) if request.filters else None
+        
         result = await search_service.search_and_answer_with_sources(request.query, filters)
+        
+        # 검색 통계 생성
+        search_time = time.time() - start_time
+        stats = SearchStats(
+            total_results=len(result.get("documents", [])),
+            filtered_results=len(result.get("documents", [])),
+            search_time=search_time,
+            avg_similarity=0.0  # TODO: 계산 로직 추가
+        )
         
         sources = None
         if result.get("sources"):
@@ -65,7 +80,7 @@ async def search_with_filters(request: RagRequest, filters: Dict[str, Any]):
         
         return RagResponse.success_response(
             message=f"필터링 검색 완료: {filters}",
-            data=result,
+            data={**result, "stats": stats.model_dump()},
             sources=sources
         )
     except Exception as e:
@@ -77,36 +92,46 @@ async def search_with_filters(request: RagRequest, filters: Dict[str, Any]):
 
 @router.get("/filters")
 async def get_available_filters():
-    """사용 가능한 필터링 옵션 반환"""
-    return RagResponse.success_response(
-        "필터링 옵션",
-        {
-            "available_filters": {
-                "filename": {
-                    "type": "string or list",
-                    "description": "파일명으로 필터링",
-                    "example": "document.txt or ['doc1.txt', 'doc2.txt']"
-                },
-                "file_type": {
-                    "type": "string or list", 
-                    "description": "파일 타입으로 필터링",
-                    "example": "pdf or ['txt', 'md']"
-                },
-                "chunk_type": {
-                    "type": "string or list",
-                    "description": "청크 타입으로 필터링",
-                    "example": "semantic or ['semantic', 'fallback']"
-                },
-                "date_range": {
-                    "type": "object",
-                    "description": "기간으로 필터링",
-                    "example": {"start": "2024-01-01", "end": "2024-12-31"}
-                },
-                "min_score": {
-                    "type": "number",
-                    "description": "최소 유사도 점수",
-                    "example": 0.5
-                }
+    """사용 가능한 필터링 옵션 반환 (Pydantic 모델 기반)"""
+    try:
+        from dto.rag_response import FilterRequest
+        
+        # Pydantic 모델에서 필드 정보 추출
+        filter_schema = FilterRequest.model_json_schema()
+        
+        return RagResponse.success_response(
+            "필터링 옵션",
+            {
+                "available_filters": filter_schema.get("properties", {}),
+                "schema": filter_schema
             }
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"필터링 옵션 조회 실패: {str(e)}"
+        )
+
+
+@router.post("/validate", response_model=RagResponse)
+async def validate_search_request(request: RagRequest):
+    """검색 요청 유효성 검증 엔드포인트"""
+    try:
+        # Pydantic 모델이 자동으로 검증 수행
+        validation_result = {
+            "valid": True,
+            "query": request.query,
+            "max_results": request.max_results,
+            "threshold": request.threshold,
+            "message": "검색 요청이 유효합니다"
         }
-    )
+        
+        return RagResponse.success_response(
+            "검색 요청 검증 완료",
+            data=validation_result
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"검색 요청 검증 실패: {str(e)}"
+        )

@@ -163,7 +163,7 @@ class SearchService:
     async def search_and_answer_with_sources(self, query: str, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         사용자 질문에 대해 RAG를 통해 답변을 생성하고 출처 정보도 함께 반환
-        메타데이터 필터링 지원
+        Pydantic 검증 자동화
         
         Args:
             query: 사용자 질문
@@ -172,12 +172,34 @@ class SearchService:
         Returns:
             답변과 출처 정보가 포함된 결과 맵
         """
+        # Pydantic 검증을 통한 데이터 유효성 확인
+        try:
+            from dto.rag_response import RagRequest, FilterRequest
+            
+            # 요청 데이터 검증
+            rag_request = RagRequest(query=query)
+            
+            # 필터링 데이터 검증
+            validated_filters = None
+            if filters:
+                filter_request = FilterRequest(**filters)
+                validated_filters = filter_request.model_dump(exclude_none=True)
+            
+            print(f"🔍 Pydantic 검증 통과: '{rag_request.query}'")
+            if validated_filters:
+                print(f"🎯 필터링 조건 검증 통과: {validated_filters}")
+            
+        except Exception as e:
+            print(f"❌ Pydantic 검증 실패: {e}")
+            # 검증 실패 시 기본값으로 진행
+            validated_filters = None
+        
         print(f"🔍 검색 시작: '{query}'")
-        if filters:
-            print(f"🎯 필터링 조건: {filters}")
+        if validated_filters:
+            print(f"🎯 필터링 조건: {validated_filters}")
         
         # 1. 1차 검색 (기존 방식 + 필터링)
-        initial_documents = await self.search_documents(query, filters)
+        initial_documents = await self.search_documents(query, validated_filters)
         print(f"📊 1차 검색 결과: {len(initial_documents)}개 문서")
         
         if not initial_documents:
@@ -207,8 +229,8 @@ class SearchService:
                 MAP_KEY_SOURCES: SourceInfo(filename="unknown", content="", similarity_score=0.0)
             }
         
-        # 4. 출처 정보 추출
-        sources = self._extract_source_info(filtered_docs)
+        # 4. 출처 정보 추출 (Pydantic 검증 적용)
+        sources = self._extract_source_info_validated(filtered_docs)
         
         # 5. 컨텍스트 생성
         context = self._build_context_with_indices(filtered_docs)
@@ -246,6 +268,46 @@ class SearchService:
                 MAP_KEY_ANSWER: MSG_AI_ANSWER_ERROR + str(e),
                 MAP_KEY_SOURCES: best_source
             }
+    
+    def _extract_source_info_validated(self, documents: List[Dict[str, Any]]) -> List[SourceInfo]:
+        """
+        Pydantic 검증을 통한 출처 정보 추출
+        
+        Args:
+            documents: 문서 리스트
+            
+        Returns:
+            검증된 출처 정보 리스트
+        """
+        sources = []
+        seen_chunks = set()
+        
+        for doc in documents:
+            try:
+                # Pydantic SourceInfo 생성 및 검증
+                source_info = SourceInfo.from_document(doc)
+                
+                # 중복 청크 확인
+                chunk_key = (source_info.filename, source_info.chunk_id)
+                if chunk_key not in seen_chunks:
+                    sources.append(source_info)
+                    seen_chunks.add(chunk_key)
+                    print(f"✅ 출처 정보 검증 통과: {source_info.filename}")
+                
+            except Exception as e:
+                print(f"❌ 출처 정보 검증 실패: {e}")
+                # 검증 실패 시 기본값으로 생성
+                try:
+                    fallback_source = SourceInfo(
+                        filename=doc.get('metadata', {}).get('filename', 'unknown'),
+                        similarity_score=0.0,
+                        content="검증 실패"
+                    )
+                    sources.append(fallback_source)
+                except Exception as fallback_error:
+                    print(f"❌ 기본 출처 정보 생성 실패: {fallback_error}")
+        
+        return sources
     
     def _find_best_matching_source_with_reranking(self, answer: str, documents: List[Dict[str, Any]], sources: List[SourceInfo]) -> SourceInfo:
         """
