@@ -39,30 +39,30 @@ class Settings(BaseSettings):
     redis_rag_key_prefix: str = Field(default="rag:documents", env="REDIS_RAG_KEY_PREFIX")
     redis_embedding_key_prefix: str = Field(default="rag:embeddings", env="REDIS_EMBEDDING_KEY_PREFIX")
     
-    # 텍스트 분할 설정
-    chunk_size: int = Field(default=300, env="CHUNK_SIZE")
-    chunk_overlap: int = Field(default=50, env="CHUNK_OVERLAP")
-    min_chunk_size_chars: int = Field(default=50, env="MIN_CHUNK_SIZE_CHARS")
-    long_document_threshold: int = Field(default=800, env="LONG_DOCUMENT_THRESHOLD")
+    # 텍스트 분할 설정 - 문맥 유지를 위해 더 큰 크기로 조정
+    chunk_size: int = Field(default=800, env="CHUNK_SIZE")  # 300 → 800으로 증가
+    chunk_overlap: int = Field(default=150, env="CHUNK_OVERLAP")  # 50 → 150으로 증가
+    min_chunk_size_chars: int = Field(default=100, env="MIN_CHUNK_SIZE_CHARS")  # 50 → 100으로 증가
+    long_document_threshold: int = Field(default=1500, env="LONG_DOCUMENT_THRESHOLD")  # 800 → 1500으로 증가
     
     # 정밀 검색 설정
-    precise_chunk_size: int = Field(default=100, env="PRECISE_CHUNK_SIZE")
-    precise_min_chunk_size_chars: int = Field(default=30, env="PRECISE_MIN_CHUNK_SIZE_CHARS")
-    precise_max_num_chunks: int = Field(default=800, env="PRECISE_MAX_NUM_CHUNKS")
+    precise_chunk_size: int = Field(default=200, env="PRECISE_CHUNK_SIZE")  # 100 → 200으로 증가
+    precise_min_chunk_size_chars: int = Field(default=50, env="PRECISE_MIN_CHUNK_SIZE_CHARS")  # 30 → 50으로 증가
+    precise_max_num_chunks: int = Field(default=400, env="PRECISE_MAX_NUM_CHUNKS")  # 800 → 400으로 감소
     
     # 속도 최적화 설정
-    speed_chunk_size: int = Field(default=400, env="SPEED_CHUNK_SIZE")
-    speed_min_chunk_size_chars: int = Field(default=100, env="SPEED_MIN_CHUNK_SIZE_CHARS")
+    speed_chunk_size: int = Field(default=600, env="SPEED_CHUNK_SIZE")  # 400 → 600으로 증가
+    speed_min_chunk_size_chars: int = Field(default=150, env="SPEED_MIN_CHUNK_SIZE_CHARS")  # 100 → 150으로 증가
     
     # 파서 우선순위 설정
     hierarchical_parser_priority: int = Field(default=1, env="HIERARCHICAL_PARSER_PRIORITY")
     markdown_parser_priority: int = Field(default=2, env="MARKDOWN_PARSER_PRIORITY")
     simple_line_parser_priority: int = Field(default=3, env="SIMPLE_LINE_PARSER_PRIORITY")
     
-    # 시맨틱 청킹 설정
-    semantic_chunk_size: int = Field(default=500, env="SEMANTIC_CHUNK_SIZE")
-    semantic_chunk_overlap: int = Field(default=50, env="SEMANTIC_CHUNK_OVERLAP")
-    semantic_similarity_threshold: float = Field(default=0.3, env="SEMANTIC_SIMILARITY_THRESHOLD")
+    # 시맨틱 청킹 설정 - 문맥 유지를 위해 더 큰 크기로 조정
+    semantic_chunk_size: int = Field(default=1000, env="SEMANTIC_CHUNK_SIZE")  # 500 → 1000으로 증가
+    semantic_chunk_overlap: int = Field(default=200, env="SEMANTIC_CHUNK_OVERLAP")  # 50 → 200으로 증가
+    semantic_similarity_threshold: float = Field(default=0.4, env="SEMANTIC_SIMILARITY_THRESHOLD")  # 0.3 → 0.4로 증가 (더 엄격한 분할)
     enable_semantic_chunking: bool = Field(default=True, env="ENABLE_SEMANTIC_CHUNKING")
     
     # 리랭킹 설정

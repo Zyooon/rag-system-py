@@ -46,6 +46,9 @@ class HierarchicalParser(DocumentParser):
             re.compile(r"^-\s*\*\*(.+?)\*\*:\s*(.+)$"), # Markdown 굵은 글씨 항목
             re.compile(r"^-\s+(.+)$"),            # 일반 목록 항목
             
+            # 기능/장르/특징 패턴 (새로 추가)
+            re.compile(r"^-?\s*(기능|장르|세탁법|특징|용도|사양|재질|크기|무게|색상|가격):\s*(.+)$"), # 제품 정보 항목
+            
             # 기타 구조화된 형식
             re.compile(r"^\[(.+)$"),            # [제목] - 대괄호 제목
             re.compile(r"^제목:\s*(.+)$"),       # 제목: 내용
