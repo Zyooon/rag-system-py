@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     rerank_threshold: float = Field(default=0.5, env="RERANK_THRESHOLD")
     cross_encoder_model: str = Field(default="jhgan/ko-sroberta-multitask", env="CROSS_ENCODER_MODEL")
     
+    # 임베딩 병렬 처리 설정
+    embedding_batch_size: int = Field(default=10, env="EMBEDDING_BATCH_SIZE")
+    embedding_max_concurrent: int = Field(default=5, env="EMBEDDING_MAX_CONCURRENT")
+    enable_parallel_embedding: bool = Field(default=True, env="ENABLE_PARALLEL_EMBEDDING")
+    
     # 벡터 저장소 설정
     vector_store_type: str = Field(default="chroma", env="VECTOR_STORE_TYPE")
     chroma_persist_directory: str = Field(default="./chroma_db", env="CHROMA_PERSIST_DIRECTORY")

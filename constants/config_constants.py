@@ -64,6 +64,8 @@ REDIS_CONNECTION_DISCONNECTED = "disconnected"
 VECTORSTORE_TYPE_SIMPLE_REDIS_BACKUP = "simple_with_redis_backup"
 
 # ==================== 메시지 상수 ====================
+MSG_DOCUMENT_PROCESSING_STARTED = "문서 처리가 백그라운드에서 시작되었습니다. 처리 완료 후 상태를 확인하세요."
+MSG_BACKGROUND_PROCESSING = "백그라운드 처리 중입니다. 잠시 후 다시 확인해주세요."
 MSG_REDIS_CONNECTION_CHECK = "Redis 연결 상태 확인"
 MSG_REDIS_STATUS_CHECK_FAILED = "Redis 상태 확인 실패: "
 MSG_REDIS_VECTORSTORE_DELETE_COMPLETE = "Redis Vector Store 삭제 완료 - 총 %d개 파일 삭제 (RAG: %d개, Embedding: %d개)"

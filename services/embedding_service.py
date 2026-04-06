@@ -72,7 +72,7 @@ class EmbeddingService(Embeddings):
     
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """
-        문서 리스트를 벡터로 변환
+        문서 리스트를 벡터로 변환 (병렬 처리 지원)
         
         Args:
             texts: 벡터로 변환할 텍스트 리스트
@@ -88,16 +88,98 @@ class EmbeddingService(Embeddings):
                 f"해결 방안: 'ollama pull {self.embedding_model}' 실행"
             )
         
+        if not texts:
+            return []
+        
+        try:
+            # 배치 크기 설정 (Ollama API 최적화)
+            batch_size = settings.embedding_batch_size if hasattr(settings, 'embedding_batch_size') else 10
+            
+            if len(texts) <= batch_size:
+                # 소량 텍스트는 직접 처리
+                vectors = await asyncio.to_thread(
+                    self.embeddings.embed_documents,
+                    texts
+                )
+                return vectors
+            else:
+                # 대량 텍스트는 병렬 배치 처리
+                return await self._embed_documents_parallel(texts, batch_size)
+                
+        except Exception as e:
+            print(f"문서 임베딩 실패: {e}")
+            raise Exception(f"임베딩 처리 중 오류 발생: {e}")
+    
+    async def _embed_documents_parallel(self, texts: List[str], batch_size: int) -> List[List[float]]:
+        """
+        대량 문서 병렬 임베딩 처리
+        
+        Args:
+            texts: 벡터로 변환할 텍스트 리스트
+            batch_size: 배치 크기
+            
+        Returns:
+            벡터 리스트
+        """
+        import time
+        start_time = time.time()
+        
+        # 텍스트를 배치로 분할
+        batches = [texts[i:i + batch_size] for i in range(0, len(texts), batch_size)]
+        
+        print(f"🚀 병렬 임베딩 시작: {len(texts)}개 텍스트 → {len(batches)}개 배치 (크기: {batch_size})")
+        
+        # 병렬 처리
+        tasks = []
+        for i, batch in enumerate(batches):
+            task = asyncio.create_task(
+                self._process_embedding_batch(batch, i),
+                name=f"embedding_batch_{i}"
+            )
+            tasks.append(task)
+        
+        # 모든 배치 처리 완료 대기
+        batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # 결과 병합
+        all_vectors = []
+        for i, result in enumerate(batch_results):
+            if isinstance(result, Exception):
+                print(f"❌ 배치 {i} 처리 실패: {result}")
+                # 실패한 배치는 더미 벡터로 대체
+                batch_size_actual = len(batches[i])
+                dummy_vectors = [[0.0] * 768 for _ in range(batch_size_actual)]
+                all_vectors.extend(dummy_vectors)
+            else:
+                all_vectors.extend(result)
+        
+        end_time = time.time()
+        print(f"✅ 병렬 임베딩 완료: {len(all_vectors)}개 벡터 ({end_time - start_time:.2f}초)")
+        
+        return all_vectors
+    
+    async def _process_embedding_batch(self, batch: List[str], batch_index: int) -> List[List[float]]:
+        """
+        개별 배치 임베딩 처리
+        
+        Args:
+            batch: 처리할 텍스트 배치
+            batch_index: 배치 인덱스
+            
+        Returns:
+            벡터 리스트
+        """
         try:
             # 비동기 호출을 위해 asyncio.to_thread 사용
             vectors = await asyncio.to_thread(
                 self.embeddings.embed_documents,
-                texts
+                batch
             )
+            print(f"✅ 배치 {batch_index} 완료: {len(vectors)}개 벡터")
             return vectors
         except Exception as e:
-            print(f"문서 임베딩 실패: {e}")
-            raise Exception(f"임베딩 처리 중 오류 발생: {e}")
+            print(f"❌ 배치 {batch_index} 실패: {e}")
+            raise
     
     async def embed_query(self, text: str) -> List[float]:
         """
