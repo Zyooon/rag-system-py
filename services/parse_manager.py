@@ -292,7 +292,7 @@ class ParseManager:
     
     def _is_good_parsing_result(self, documents: List[Dict[str, Any]], original_content: str) -> bool:
         """
-        파싱 결과의 품질 평가
+        파싱 결과의 품질 평가 (개선된 하이브리드 파싱 기준)
         
         Args:
             documents: 파싱된 문서 리스트
@@ -308,7 +308,7 @@ class ParseManager:
         if len(documents) < 1:
             return False
         
-        # 2. 파싱된 내용의 총 길이가 원본의 70% 이상인지 확인 (HierarchicalParser는 더 높은 커버리지 필요)
+        # 2. 파싱된 내용의 총 길이가 원본의 70% 이상인지 확인
         total_parsed_length = sum(len(doc.get("text", "")) for doc in documents)
         
         coverage_ratio = total_parsed_length / len(original_content)
@@ -316,15 +316,44 @@ class ParseManager:
             print(f"파싱 커버리지 낮음: {int(coverage_ratio * 100)}%")
             return False
         
-        # 3. 각 청크의 평균 길이가 적절한지 확인 (너무 짧으면 안 좋음)
+        # 3. 청크 평균 길이와 항목 수 기반으로 하이브리드 파싱 결정
         avg_chunk_length = total_parsed_length / len(documents)
-        if avg_chunk_length < 50 and len(documents) > 1:  # 여러 청크일 때만 평균 길이 체크
+        
+        # 개선된 기준: 항목이 많은 문서는 더 세밀하게 분할
+        if len(documents) <= 3:  # 청크가 3개 이하면 무조건 하이브리드 파싱
+            print(f"청크 수 너무 적음: {len(documents)}개 → 하이브리드 파싱 필요")
+            return False
+        
+        # 평균 길이가 200자 이상이면 무조건 하이브리드 파싱 (너무 큰 덩어리 방지)
+        if avg_chunk_length > 200:
+            print(f"청크 평균 길이 너무 김: {int(avg_chunk_length)}자 → 하이브리드 파싱 필요")
+            return False
+        
+        # 평균 길이가 100-200자 사이고 청크 수가 5개 이하면 하이브리드 파싱
+        if avg_chunk_length > 100 and len(documents) <= 5:
+            print(f"청크 크기와 수 부적절: {int(avg_chunk_length)}자, {len(documents)}개 → 하이브리드 파싱 필요")
+            return False
+        
+        # 평균 길이가 50자 미만이고 청크가 많으면 안 좋음
+        if avg_chunk_length < 50 and len(documents) > 1:
             print(f"청크 평균 길이 너무 짧음: {int(avg_chunk_length)}자")
             return False
         
         # 4. 청크가 너무 많이 나뉘었는지 확인 (과도한 분할 방지)
         if len(documents) > 50:
             print(f"청크 수 너무 많음: {len(documents)}개")
+            return False
+        
+        # 5. 문서 내용에 기능/장르/특징 패턴이 있는데 청크가 적으면 하이브리드 파싱
+        import re
+        feature_patterns = [
+            r"기능\s*:", r"장르\s*:", r"세탁법\s*:", r"특징\s*:",
+            r"용도\s*:", r"사양\s*:", r"재질\s*:", r"크기\s*:"
+        ]
+        
+        has_features = any(re.search(pattern, original_content, re.IGNORECASE) for pattern in feature_patterns)
+        if has_features and len(documents) <= 4:
+            print(f"기능/특징 패턴 있으나 청크 수 부족: {len(documents)}개 → 하이브리드 파싱 필요")
             return False
         
         return True
