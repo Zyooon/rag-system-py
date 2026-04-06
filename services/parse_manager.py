@@ -290,34 +290,6 @@ class ParseManager:
         
         return parser_info
     
-    def parse_with_specific_parser(self, parser_name: str, content: str, base_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        특정 파서로 파싱 시도 (테스트용)
-        
-        Args:
-            parser_name: 사용할 파서 이름
-            content: 파싱할 내용
-            base_metadata: 기본 메타데이터
-            
-        Returns:
-            파싱 결과
-        """
-        target_parser = None
-        for parser in self.document_parsers:
-            if parser.get_parser_name() == parser_name:
-                target_parser = parser
-                break
-        
-        if target_parser:
-            try:
-                return target_parser.parse(content, base_metadata)
-            except Exception as e:
-                print(f"{parser_name} 파싱 실패: {e}")
-                return []
-        else:
-            print(f"파서를 찾을 수 없음: {parser_name}")
-            return []
-    
     def _is_good_parsing_result(self, documents: List[Dict[str, Any]], original_content: str) -> bool:
         """
         파싱 결과의 품질 평가

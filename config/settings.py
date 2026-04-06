@@ -59,6 +59,18 @@ class Settings(BaseSettings):
     markdown_parser_priority: int = Field(default=2, env="MARKDOWN_PARSER_PRIORITY")
     simple_line_parser_priority: int = Field(default=3, env="SIMPLE_LINE_PARSER_PRIORITY")
     
+    # 시맨틱 청킹 설정
+    semantic_chunk_size: int = Field(default=500, env="SEMANTIC_CHUNK_SIZE")
+    semantic_chunk_overlap: int = Field(default=50, env="SEMANTIC_CHUNK_OVERLAP")
+    semantic_similarity_threshold: float = Field(default=0.3, env="SEMANTIC_SIMILARITY_THRESHOLD")
+    enable_semantic_chunking: bool = Field(default=True, env="ENABLE_SEMANTIC_CHUNKING")
+    
+    # 리랭킹 설정
+    enable_reranking: bool = Field(default=True, env="ENABLE_RERANKING")
+    rerank_top_k: int = Field(default=5, env="RERANK_TOP_K")
+    rerank_threshold: float = Field(default=0.5, env="RERANK_THRESHOLD")
+    cross_encoder_model: str = Field(default="jhgan/ko-sroberta-multitask", env="CROSS_ENCODER_MODEL")
+    
     # 벡터 저장소 설정
     vector_store_type: str = Field(default="chroma", env="VECTOR_STORE_TYPE")
     chroma_persist_directory: str = Field(default="./chroma_db", env="CHROMA_PERSIST_DIRECTORY")

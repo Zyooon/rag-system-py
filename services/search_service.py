@@ -1,6 +1,7 @@
 """
 검색 및 답변 생성 서비스
 Java 프로젝트의 SearchService와 유사한 기능 제공
+시맨틱 청킹과 리랭킹으로 검색 품질 향상
 """
 
 import re
@@ -26,6 +27,24 @@ class SearchService:
         self.redis_search_repository = RedisSearchRepository()
         self.redis_document_repository = RedisDocumentRepository()
         self.llm_service = None
+        
+        # 시맨틱 청킹 서비스
+        if settings.enable_semantic_chunking:
+            from .semantic_chunking_service import SemanticChunkingService
+            self.semantic_chunking_service = SemanticChunkingService()
+            print("✅ 시맨틱 청킹 서비스 활성화")
+        else:
+            self.semantic_chunking_service = None
+            print("❌ 시맨틱 청킹 서비스 비활성화")
+        
+        # 리랭킹 서비스
+        if settings.enable_reranking:
+            from .reranking_service import RerankingService
+            self.reranking_service = RerankingService()
+            print("✅ 리랭킹 서비스 활성화")
+        else:
+            self.reranking_service = None
+            print("❌ 리랭킹 서비스 비활성화")
         
         # LLM 서비스 초기화 (순환 임포트 방지)
         self._initialize_llm_service()
@@ -112,6 +131,7 @@ class SearchService:
     async def search_and_answer_with_sources(self, query: str) -> Dict[str, Any]:
         """
         사용자 질문에 대해 RAG를 통해 답변을 생성하고 출처 정보도 함께 반환
+        시맨틱 청킹과 리랭킹으로 검색 품질 향상
         
         Args:
             query: 사용자 질문
@@ -119,17 +139,32 @@ class SearchService:
         Returns:
             답변과 출처 정보가 포함된 결과 맵
         """
-        # Redis에서 문서 검색 (키워드 기반)
-        relevant_documents = await self._search_documents_by_keyword(query)
+        print(f"🔍 검색 시작: '{query}'")
         
-        if not relevant_documents:
+        # 1. 1차 검색 (기존 방식)
+        initial_documents = await self.search_documents(query)
+        print(f"📊 1차 검색 결과: {len(initial_documents)}개 문서")
+        
+        if not initial_documents:
             return {
                 MAP_KEY_ANSWER: MSG_NO_KNOWLEDGE_BASE,
                 MAP_KEY_SOURCES: SourceInfo(filename="unknown", content="", similarity_score=0.0)
             }
         
-        # 유사도 필터링 및 정렬
-        filtered_docs = self._filter_and_sort_documents(relevant_documents)
+        # 2. 리랭킹 적용
+        if self.reranking_service:
+            reranked_documents = await self.reranking_service.rerank_documents(query, initial_documents)
+            print(f"🎯 리랭킹 결과: {len(reranked_documents)}개 문서")
+            
+            # 리랭킹 통계 출력
+            stats = await self.reranking_service.get_reranking_stats(query, initial_documents)
+            print(f"📈 리랭킹 통계: 평균 점수 {stats.get('reranked_avg_score', 0):.3f}")
+        else:
+            reranked_documents = initial_documents
+            print("⚠️ 리랭킹 스킵")
+        
+        # 3. 유사도 필터링 및 정렬
+        filtered_docs = self._filter_and_sort_documents(reranked_documents)
         
         if not filtered_docs:
             return {
@@ -137,10 +172,10 @@ class SearchService:
                 MAP_KEY_SOURCES: SourceInfo(filename="unknown", content="", similarity_score=0.0)
             }
         
-        # 출처 정보 추출
+        # 4. 출처 정보 추출
         sources = self._extract_source_info(filtered_docs)
         
-        # 컨텍스트 생성
+        # 5. 컨텍스트 생성
         context = self._build_context_with_indices(filtered_docs)
         
         if not context.strip():
@@ -149,7 +184,7 @@ class SearchService:
                 MAP_KEY_SOURCES: SourceInfo(filename="unknown", content="", similarity_score=0.0)
             }
         
-        # 프롬프트 생성 및 LLM 호출
+        # 6. 프롬프트 생성 및 LLM 호출
         prompt = PromptTemplate.create_search_with_sources_prompt(context, query)
         
         try:
@@ -160,7 +195,11 @@ class SearchService:
                 }
             
             answer = await self.llm_service.generate_answer(prompt)
-            best_source = self._find_best_matching_source(answer, filtered_docs, sources)
+            
+            # 7. 최적 출처 선택 (리랭킹 점수 고려)
+            best_source = self._find_best_matching_source_with_reranking(answer, filtered_docs, sources)
+            
+            print(f"✅ 최종 출처: {best_source.filename} (점수: {best_source.similarity_score:.3f})")
             
             return {
                 MAP_KEY_ANSWER: answer,
@@ -172,6 +211,62 @@ class SearchService:
                 MAP_KEY_ANSWER: MSG_AI_ANSWER_ERROR + str(e),
                 MAP_KEY_SOURCES: best_source
             }
+    
+    def _find_best_matching_source_with_reranking(self, answer: str, documents: List[Dict[str, Any]], sources: List[SourceInfo]) -> SourceInfo:
+        """
+        리랭킹 점수를 고려한 최적 출처 선택
+        
+        Args:
+            answer: LLM 답변
+            documents: 관련 문서 리스트
+            sources: 출처 정보 리스트
+            
+        Returns:
+            가장 적절한 출처 정보
+        """
+        # 참조 번호 추출
+        pattern = re.compile(r'\[(\d+)\]')
+        matches = pattern.findall(answer)
+        ref_numbers = set(int(num) for num in matches)
+        
+        best_source = SourceInfo(filename="unknown", content="", similarity_score=0.0)
+        
+        # sources 리스트가 비어있으면 첫 번째 documents에서 SourceInfo 생성
+        if not sources:
+            if documents:
+                best_source = self._create_source_info_from_document(documents[0])
+            return best_source
+        
+        # 참조 번호에 해당하는 출처 찾기
+        for ref_num in ref_numbers:
+            doc_index = ref_num - 1
+            if 0 <= doc_index < len(sources):
+                source_info = sources[doc_index]
+                
+                if source_info.filename and source_info.filename != "unknown":
+                    best_source = source_info
+                    break
+        
+        # 적절한 출처를 찾지 못했다면 리랭킹 점수가 가장 높은 출처 선택
+        if best_source.filename == "unknown" and sources:
+            # 리랭킹 점수가 있는 문서 찾기
+            best_rerank_source = None
+            best_rerank_score = 0.0
+            
+            for source in sources:
+                # 해당 문서의 리랭킹 점수 찾기
+                for doc in documents:
+                    if (doc.get('metadata', {}).get('filename') == source.filename and 
+                        'rerank_score' in doc):
+                        rerank_score = doc['rerank_score']
+                        if rerank_score > best_rerank_score:
+                            best_rerank_score = rerank_score
+                            best_rerank_source = source
+                            break
+            
+            best_source = best_rerank_source if best_rerank_source else sources[0]
+        
+        return best_source
     
     def _filter_and_sort_documents(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -318,86 +413,6 @@ class SearchService:
             context_parts.append(context_part)
         
         return "\n".join(context_parts)
-    
-    def _create_search_with_sources_prompt(self, context: str, query: str) -> str:
-        """
-        검색용 프롬프트 생성
-        
-        Args:
-            context: 검색된 문서 컨텍스트
-            query: 사용자 질문
-            
-        Returns:
-            생성된 프롬프트
-        """
-        prompt = f"""당신은 주어진 문서를 바탕으로 질문에 답변하는 도우미입니다.
-
-다음 문서를 사용하여 질문에 답변하세요. 문서에 답변이 없다면 "문서에 관련 정보가 없습니다"라고 말하세요.
-
-문서:
-{context}
-
-질문: {query}
-
-답변 시 참조 번호를 사용하여 출처를 명시해주세요. 예: "이 정보는 [1]번 문서에 따르면..."
-"""
-        return prompt
-    
-    async def _call_llm(self, prompt: str) -> str:
-        """
-        LLM 호출 (이전 메서드와 호환성)
-        
-        Args:
-            prompt: LLM에 전달할 프롬프트
-            
-        Returns:
-            LLM 응답
-        """
-        if self.llm_service is None:
-            return "LLM 서비스가 초기화되지 않았습니다"
-        
-        return await self.llm_service.generate_answer(prompt)
-    
-    def _find_best_matching_source(self, answer: str, documents: List[Dict[str, Any]], sources: List[SourceInfo]) -> SourceInfo:
-        """
-        답변의 참조 번호를 기반으로 정확한 출처 찾기
-        
-        Args:
-            answer: LLM 답변
-            documents: 관련 문서 리스트
-            sources: 출처 정보 리스트
-            
-        Returns:
-            가장 적절한 출처 정보
-        """
-        # 참조 번호 추출
-        pattern = re.compile(r'\[(\d+)\]')
-        matches = pattern.findall(answer)
-        ref_numbers = set(int(num) for num in matches)
-        
-        best_source = SourceInfo(filename="unknown", content="", similarity_score=0.0)
-        
-        # sources 리스트가 비어있으면 첫 번째 documents에서 SourceInfo 생성
-        if not sources:
-            if documents:
-                best_source = self._create_source_info_from_document(documents[0])
-            return best_source
-        
-        # 참조 번호에 해당하는 출처 찾기
-        for ref_num in ref_numbers:
-            doc_index = ref_num - 1
-            if 0 <= doc_index < len(sources):
-                source_info = sources[doc_index]
-                
-                if source_info.filename and source_info.filename != "unknown":
-                    best_source = source_info
-                    break
-        
-        # 적절한 출처를 찾지 못했다면 sources의 첫 번째 항목 사용
-        if best_source.filename == "unknown" and sources:
-            best_source = sources[0]
-        
-        return best_source
     
     async def get_all_documents(self) -> List[Dict[str, Any]]:
         """

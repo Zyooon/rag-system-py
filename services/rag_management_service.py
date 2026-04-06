@@ -36,6 +36,15 @@ class RagManagementService:
         self.text_splitter_processor = TextSplitterProcessor()
         self.redis_document_repository = RedisDocumentRepository()
         
+        # 시맨틱 청킹 서비스
+        if settings.enable_semantic_chunking:
+            from .semantic_chunking_service import SemanticChunkingService
+            self.semantic_chunking_service = SemanticChunkingService()
+            print("✅ RAG 관리: 시맨틱 청킹 서비스 활성화")
+        else:
+            self.semantic_chunking_service = None
+            print("❌ RAG 관리: 시맨틱 청킹 서비스 비활성화")
+        
         # 벡터 저장소 초기화 (순환 임포트 방지)
         from repositories import ChromaVectorStore
         self.vector_store = ChromaVectorStore()
@@ -95,6 +104,15 @@ class RagManagementService:
                 # ParseManager로 최적의 파서 선택 및 분할
                 parsed_chunks = self.parse_manager.parse_document(content, filename)
                 processed_documents.extend(parsed_chunks)
+            
+            # 시맨틱 청킹 적용
+            if self.semantic_chunking_service:
+                print(f"🧠 시맨틱 청킹 적용: {len(processed_documents)}개 문서")
+                semantic_chunks = await self.semantic_chunking_service.batch_semantic_chunk(processed_documents)
+                processed_documents = semantic_chunks
+                print(f"🎯 시맨틱 청킹 결과: {len(processed_documents)}개 청크")
+            else:
+                print("⚠️ 시맨틱 청킹 스킵")
             
             # 크기 최적화 (TextSplitterProcessor)
             processed_documents = self._optimize_chunk_sizes(processed_documents)
@@ -163,59 +181,6 @@ class RagManagementService:
         
         print(f"크기 최적화 완료: {len(chunks)} → {len(optimized_chunks)}개 청크")
         return optimized_chunks
-    
-    async def _split_documents_contextually(self, raw_documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        맥락 기반으로 문서 분할
-        
-        Args:
-            raw_documents: 원본 문서 리스트
-            
-        Returns:
-            맥락 기반으로 분할된 문서 리스트
-        """
-        from parsers import HierarchicalParser
-        from datetime import datetime
-        
-        hierarchical_parser = HierarchicalParser()
-        all_processed_chunks = []
-        
-        for doc in raw_documents:
-            try:
-                # 문서 내용과 메타데이터 추출
-                content = doc.get('text', '')
-                base_metadata = doc.get('metadata', {})
-                filename = base_metadata.get('filename', 'unknown')
-                
-                if not content.strip():
-                    continue
-                
-                # 맥락 기반 파싱
-                parsed_chunks = hierarchical_parser.parse(content, base_metadata)
-                
-                if parsed_chunks:
-                    # 청크 인덱스 및 추가 메타데이터 설정
-                    for i, chunk in enumerate(parsed_chunks):
-                        chunk['metadata']['chunk_index'] = i
-                        chunk['metadata']['start_char'] = 0  # TODO: 정확한 위치 계산
-                        chunk['metadata']['end_char'] = len(chunk.get('text', ''))
-                        chunk['metadata']['chunk_length'] = len(chunk.get('text', ''))
-                        chunk['metadata']['splitter_type'] = 'contextual_hierarchical'
-                        chunk['metadata']['saved_at'] = datetime.now().isoformat()
-                    
-                    all_processed_chunks.extend(parsed_chunks)
-                    print(f"파일 '{filename}' 맥락 기반 분할: {len(parsed_chunks)}개 청크")
-                else:
-                    print(f"파일 '{filename}' 맥락 기반 분할 실패")
-                    
-            except Exception as e:
-                print(f"문서 맥락 분할 오류: {e}")
-                # 실패 시 기존 방식으로 분할
-                fallback_chunks = self.text_splitter_processor.split_documents([doc])
-                all_processed_chunks.extend(fallback_chunks)
-        
-        print(f"총 {len(raw_documents)}개 원본 문서 → {len(all_processed_chunks)}개 맥락 청크")
-        return all_processed_chunks
     
     # ==================== 벡터 저장소 관리 기능 ====================
     
