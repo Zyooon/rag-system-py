@@ -39,11 +39,11 @@ class Settings(BaseSettings):
     redis_rag_key_prefix: str = Field(default="rag:documents", env="REDIS_RAG_KEY_PREFIX")
     redis_embedding_key_prefix: str = Field(default="rag:embeddings", env="REDIS_EMBEDDING_KEY_PREFIX")
     
-    # 텍스트 분할 설정 - 문맥 유지를 위해 더 큰 크기로 조정
-    chunk_size: int = Field(default=800, env="CHUNK_SIZE")  # 300 → 800으로 증가
-    chunk_overlap: int = Field(default=150, env="CHUNK_OVERLAP")  # 50 → 150으로 증가
-    min_chunk_size_chars: int = Field(default=100, env="MIN_CHUNK_SIZE_CHARS")  # 50 → 100으로 증가
-    long_document_threshold: int = Field(default=1500, env="LONG_DOCUMENT_THRESHOLD")  # 800 → 1500으로 증가
+    # 텍스트 분할 설정 - 정밀 검색을 위해 더 작은 크기로 조정
+    chunk_size: int = Field(default=150, env="CHUNK_SIZE")  # 800 → 150으로 감소 (정밀 검색)
+    chunk_overlap: int = Field(default=20, env="CHUNK_OVERLAP")  # 150 → 20으로 감소
+    min_chunk_size_chars: int = Field(default=20, env="MIN_CHUNK_SIZE_CHARS")  # 100 → 20으로 감소
+    long_document_threshold: int = Field(default=800, env="LONG_DOCUMENT_THRESHOLD")  # 1500 → 800으로 감소
     
     # 정밀 검색 설정
     precise_chunk_size: int = Field(default=200, env="PRECISE_CHUNK_SIZE")  # 100 → 200으로 증가
