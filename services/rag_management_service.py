@@ -67,21 +67,19 @@ class RagManagementService:
         
         return result
     
-    async def load_documents_from_folder(self, folder_path: str) -> None:
-        """특정 폴더의 모든 텍스트 파일을 자동으로 로드하는 메서드"""
-        if not await self.file_manager.ensure_folder_exists(folder_path):
-            print(f"폴더 생성 실패: {folder_path}")
-            return
-        
-        all_documents = await self.process_files_in_folder(folder_path)
-        
-        if all_documents:
-            final_documents = self.create_final_documents(all_documents)
-            print(f"문서 처리 완료: {len(final_documents)}개 최종 문서 생성")
-    
     async def save_documents_from_folder_with_duplicate_check(self, folder_path: str) -> Dict[str, Any]:
         """특정 폴더의 문서들을 Redis에 저장하는 메서드 (중복 방지)"""
-        folder_status = self.file_manager.get_folder_status(folder_path)
+        # Check folder existence directly
+        folder = Path(folder_path)
+        if not folder.exists() or not folder.is_dir():
+            return {
+                MAP_KEY_SAVED_COUNT: 0,
+                MAP_KEY_DUPLICATE_COUNT: 0,
+                MAP_KEY_TOTAL_COUNT: 0,
+                MAP_KEY_MESSAGE: MSG_FOLDER_NOT_EXISTS
+            }
+        
+        folder_status = {"exists": True, "files": [f.name for f in folder.iterdir() if f.is_file()]}
         
         if not folder_status.get(KEY_EXISTS, False):
             return {
@@ -92,7 +90,7 @@ class RagManagementService:
             }
         
         # 순수 텍스트 파일만 가져오기 (파싱 없음)
-        raw_documents = await self.load_raw_documents_from_folder(folder_path)
+        raw_documents = await self.process_files_in_folder(folder_path)
         
         if raw_documents:
             # ParseManager를 통한 전략적 문서 분할
@@ -225,8 +223,10 @@ class RagManagementService:
             loaded_files = set()
             
             try:
-                # FileManager를 통해 파일 목록 가져오기
-                folder_status = self.file_manager.get_folder_status(settings.documents_folder)
+                # Check folder directly
+                folder = Path(settings.documents_folder)
+                folder_status = {"exists": folder.exists() and folder.is_dir(), 
+                                "files": [f.name for f in folder.iterdir() if f.is_file()] if folder.exists() else []}
                 
                 if folder_status.get(KEY_EXISTS, False):
                     files = folder_status.get(KEY_FILES, [])
@@ -391,71 +391,3 @@ class RagManagementService:
             MAP_KEY_DOCUMENT_COUNT: len(split_docs),
             MAP_KEY_MESSAGE: "문서 저장 완료"
         }
-    
-    async def load_raw_documents_from_folder(self, folder_path: str) -> List[Dict[str, Any]]:
-        """폴더에서 순수 텍스트 문서만 가져오기 (파싱 없음)"""
-        raw_documents = []
-        folder = Path(folder_path)
-        
-        file_contents = await self.file_manager.read_all_supported_files(folder)
-        
-        for file_content in file_contents:
-            try:
-                # 순수 텍스트와 기본 메타데이터만 저장
-                document = {
-                    "text": file_content.content,
-                    "metadata": {
-                        METADATA_KEY_FILENAME: file_content.filename,
-                        METADATA_KEY_FILEPATH: str(file_content.file_path),
-                        METADATA_KEY_SAVED_AT: file_content.metadata.get(METADATA_KEY_SAVED_AT, "")
-                    }
-                }
-                raw_documents.append(document)
-                print(f"원본 텍스트 로드: {file_content.filename} (길이: {len(file_content.content)})")
-            
-            except Exception as e:
-                print(f"원본 텍스트 로드 실패: {file_content.filename} - {e}")
-        
-        return raw_documents
-    
-    async def load_documents_from_folder_simple(self, folder_path: str) -> List[Dict[str, Any]]:
-        """단순 문서 로드"""
-        all_documents = []
-        folder = Path(folder_path)
-        
-        file_contents = await self.file_manager.read_all_supported_files(folder)
-        
-        for file_content in file_contents:
-            try:
-                content = file_content.content
-                filename = file_content.filename
-                
-                # ParseManager를 통해 최적의 파서 자동 선택
-                parsed_documents = self.parse_manager.parse_document(content, filename)
-                
-                if not parsed_documents:
-                    print(f"파싱 실패: {filename} (파서 선택 불가)")
-                else:
-                    print(f"ParseManager로 {len(parsed_documents)}개 조각 분할: {filename}")
-                
-                # 최종 Fallback: 정말 아무것도 안 되면 전체 저장
-                if not parsed_documents:
-                    fallback_metadata = {
-                        METADATA_KEY_FILENAME: filename,
-                        METADATA_KEY_FILEPATH: str(file_content.file_path),
-                        METADATA_KEY_SAVED_AT: "2024-01-01T00:00:00"  # 임시
-                    }
-                    document = {
-                        "text": content,
-                        "metadata": fallback_metadata
-                    }
-                    all_documents.append(document)
-                    print(f"전체 문서로 저장: {filename}")
-                else:
-                    all_documents.extend(parsed_documents)
-                    print(f"총 {len(parsed_documents)}개 조각 저장: {filename}")
-            
-            except Exception as e:
-                print(f"문서 처리 실패: {file_content.filename} - {e}")
-        
-        return all_documents

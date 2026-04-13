@@ -116,65 +116,6 @@ class RerankingService:
         
         return filtered[:self.rerank_top_k]
     
-    async def rerank_with_multiple_strategies(self, query: str, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        다중 전략 리랭킹
-        
-        Args:
-            query: 사용자 질문
-            documents: 검색된 문서 리스트
-            
-        Returns:
-            다중 전략으로 재랭킹된 문서 리스트
-        """
-        if not self.cross_encoder:
-            return documents
-        
-        try:
-            # 1. Cross-Encoder 리랭킹
-            cross_encoder_docs = await self.rerank_documents(query, documents)
-            
-            # 2. 유사도 점수와 리랭킹 점수 결합
-            combined_docs = self._combine_scores(documents, cross_encoder_docs)
-            
-            # 3. 최종 정렬
-            final_docs = sorted(combined_docs, key=lambda x: x.get('combined_score', 0), reverse=True)
-            
-            return final_docs[:self.rerank_top_k]
-            
-        except Exception as e:
-            logger.error(f"다중 전략 리랭킹 실패: {e}")
-            return documents
-    
-    def _combine_scores(self, original_docs: List[Dict[str, Any]], reranked_docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """원본 점수와 리랭킹 점수 결합"""
-        combined = []
-        
-        # 문서 ID 기반 매핑
-        doc_map = {doc.get('text', ''): doc for doc in original_docs}
-        
-        for reranked_doc in reranked_docs:
-            text = reranked_doc.get('text', '')
-            original_doc = doc_map.get(text, {})
-            
-            # 점수 결합 (가중치 적용)
-            similarity_score = original_doc.get('similarity_score', 0.0)
-            rerank_score = reranked_doc.get('rerank_score', 0.0)
-            
-            # 가중치: 리랭킹 0.7, 유사도 0.3
-            combined_score = (rerank_score * 0.7) + (similarity_score * 0.3)
-            
-            combined_doc = reranked_doc.copy()
-            combined_doc.update({
-                'combined_score': combined_score,
-                'similarity_score': similarity_score,
-                'rerank_weight': 0.7,
-                'similarity_weight': 0.3
-            })
-            
-            combined.append(combined_doc)
-        
-        return combined
     
     async def get_reranking_stats(self, query: str, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         """리랭킹 통계 정보"""

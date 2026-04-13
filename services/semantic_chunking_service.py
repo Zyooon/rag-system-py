@@ -35,46 +35,6 @@ class SemanticChunkingService:
             separators=["\n\n", "\n", "。", "？", "！", "；", "．", "？", "！"]
         )
     
-    async def semantic_chunk_document(self, document: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        시맨틱 청킹으로 문서 분할
-        
-        Args:
-            document: 분할할 문서
-            
-        Returns:
-            시맨틱 청크 리스트
-        """
-        text = document.get("text", "")
-        metadata = document.get("metadata", {})
-        
-        if not text.strip():
-            return [document]
-        
-        if not self.embedding_model:
-            # 모델이 없으면 기본 분할기 사용
-            return await self._fallback_chunking(document)
-        
-        try:
-            # 1. 문장 단위로 분할
-            sentences = self._split_into_sentences(text)
-            
-            # 2. 문장 임베딩 생성
-            embeddings = await self._generate_embeddings(sentences)
-            
-            # 3. 의미 경계점 찾기
-            semantic_boundaries = self._find_semantic_boundaries(sentences, embeddings)
-            
-            # 4. 청크 생성
-            chunks = self._create_semantic_chunks(sentences, semantic_boundaries, metadata)
-            
-            logger.info(f"🧠 시맨틱 청킹 완료: {len(chunks)}개 청크 생성")
-            return chunks
-            
-        except Exception as e:
-            logger.error(f"시맨틱 청킹 실패: {e}")
-            return await self._fallback_chunking(document)
-    
     def _split_into_sentences(self, text: str) -> List[str]:
         """문장 단위로 분할"""
         import re
@@ -200,11 +160,36 @@ class SemanticChunkingService:
             return [document]
     
     async def batch_semantic_chunk(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """배치 시맨틱 청킹"""
+        """Batch semantic chunking"""
         all_chunks = []
         
-        for doc in documents:
-            chunks = await self.semantic_chunk_document(doc)
-            all_chunks.extend(chunks)
+        for document in documents:
+            try:
+                text = document.get("text", "")
+                metadata = document.get("metadata", {})
+                
+                # Split into sentences
+                sentences = self._split_into_sentences(text)
+                
+                if len(sentences) <= 1:
+                    all_chunks.append(document)
+                    continue
+                
+                # Generate embeddings
+                embeddings = await self._generate_embeddings(sentences)
+                
+                # Find semantic boundaries
+                boundaries = self._find_semantic_boundaries(sentences, embeddings)
+                
+                # Create semantic chunks
+                chunks = self._create_semantic_chunks(sentences, boundaries, metadata)
+                
+                logger.info(f"Semantic chunking complete: {len(chunks)} chunks created")
+                all_chunks.extend(chunks)
+                
+            except Exception as e:
+                logger.error(f"Semantic chunking failed: {e}")
+                fallback_chunks = await self._fallback_chunking(document)
+                all_chunks.extend(fallback_chunks)
         
         return all_chunks

@@ -39,20 +39,20 @@ class Settings(BaseSettings):
     redis_rag_key_prefix: str = Field(default="rag:documents", env="REDIS_RAG_KEY_PREFIX")
     redis_embedding_key_prefix: str = Field(default="rag:embeddings", env="REDIS_EMBEDDING_KEY_PREFIX")
     
-    # 텍스트 분할 설정 - 정밀 검색을 위해 더 작은 크기로 조정
-    chunk_size: int = Field(default=150, env="CHUNK_SIZE")  # 800 → 150으로 감소 (정밀 검색)
-    chunk_overlap: int = Field(default=20, env="CHUNK_OVERLAP")  # 150 → 20으로 감소
-    min_chunk_size_chars: int = Field(default=20, env="MIN_CHUNK_SIZE_CHARS")  # 100 → 20으로 감소
-    long_document_threshold: int = Field(default=800, env="LONG_DOCUMENT_THRESHOLD")  # 1500 → 800으로 감소
+    # Text splitting settings - optimized for precise search with short documents
+    chunk_size: int = Field(default=150, env="CHUNK_SIZE")  # 300 -> 150 decreased (more precise search)
+    chunk_overlap: int = Field(default=20, env="CHUNK_OVERLAP")  # 50 -> 20 decreased
+    min_chunk_size_chars: int = Field(default=20, env="MIN_CHUNK_SIZE_CHARS")  # 50 -> 20 decreased (allow very short chunks)
+    long_document_threshold: int = Field(default=800, env="LONG_DOCUMENT_THRESHOLD")  # 1500 -> 800 decreased
     
-    # 정밀 검색 설정
-    precise_chunk_size: int = Field(default=200, env="PRECISE_CHUNK_SIZE")  # 100 → 200으로 증가
-    precise_min_chunk_size_chars: int = Field(default=50, env="PRECISE_MIN_CHUNK_SIZE_CHARS")  # 30 → 50으로 증가
-    precise_max_num_chunks: int = Field(default=400, env="PRECISE_MAX_NUM_CHUNKS")  # 800 → 400으로 감소
+    # Precise search settings
+    precise_chunk_size: int = Field(default=200, env="PRECISE_CHUNK_SIZE")  # 100 -> 200 increased
+    precise_min_chunk_size_chars: int = Field(default=50, env="PRECISE_MIN_CHUNK_SIZE_CHARS")  # 30 -> 50 increased
+    precise_max_num_chunks: int = Field(default=400, env="PRECISE_MAX_NUM_CHUNKS")  # 800 -> 400 decreased
     
-    # 속도 최적화 설정
-    speed_chunk_size: int = Field(default=600, env="SPEED_CHUNK_SIZE")  # 400 → 600으로 증가
-    speed_min_chunk_size_chars: int = Field(default=150, env="SPEED_MIN_CHUNK_SIZE_CHARS")  # 100 → 150으로 증가
+    # Speed optimization settings
+    speed_chunk_size: int = Field(default=600, env="SPEED_CHUNK_SIZE")  # 400 -> 600 increased
+    speed_min_chunk_size_chars: int = Field(default=150, env="SPEED_MIN_CHUNK_SIZE_CHARS")  # 100 -> 150 increased
     
     # 파서 우선순위 설정
     hierarchical_parser_priority: int = Field(default=1, env="HIERARCHICAL_PARSER_PRIORITY")
@@ -88,8 +88,6 @@ class Settings(BaseSettings):
     
     # 문서 처리 설정
     documents_folder: str = Field(default="./documents", env="DOCUMENTS_FOLDER")
-    chunk_size: int = Field(default=1000, env="CHUNK_SIZE")
-    chunk_overlap: int = Field(default=200, env="CHUNK_OVERLAP")
     max_file_size_mb: int = Field(default=50, env="MAX_FILE_SIZE_MB")
     
     # 지원되는 파일 형식

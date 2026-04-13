@@ -46,8 +46,12 @@ class HierarchicalParser(DocumentParser):
             re.compile(r"^-\s*\*\*(.+?)\*\*:\s*(.+)$"), # Markdown 굵은 글씨 항목
             re.compile(r"^-\s+(.+)$"),            # 일반 목록 항목
             
-            # 기능/장르/특징 패턴 (새로 추가)
-            re.compile(r"^-?\s*(기능|장르|세탁법|특징|용도|사양|재질|크기|무게|색상|가격):\s*(.+)$"), # 제품 정보 항목
+            # Function/Genre/Feature patterns for forced splitting (most specific first)
+            re.compile(r"^-?\s*(?:\*\*)?(function|genre|washing_method|feature|use|spec|material|size|weight|color|price|functionality|characteristics|purpose|specifications|material|size|weight|color|price)(?:\*\*)?:\s*(.+)$", re.IGNORECASE), # Product information items (case insensitive)
+            
+            # General keyword patterns for forced splitting
+            re.compile(r"^-?\s*(\w+(?:\s+\w+)*?):\s*(.+)$"), # Any multi-word ending with colon (most general)
+            re.compile(r"^-?\s*([^\s:]+(?:\s+[^\s:]+)*?):\s*(.+)$"), # Any text ending with colon
             
             # 기타 구조화된 형식
             re.compile(r"^\[(.+)$"),            # [제목] - 대괄호 제목

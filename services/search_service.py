@@ -331,7 +331,7 @@ class SearchService:
         # sources 리스트가 비어있으면 첫 번째 documents에서 SourceInfo 생성
         if not sources:
             if documents:
-                best_source = self._create_source_info_from_document(documents[0])
+                best_source = SourceInfo.from_document(documents[0])
             return best_source
         
         # 참조 번호에 해당하는 출처 찾기
@@ -392,112 +392,15 @@ class SearchService:
         # 최대 결과 수 제한
         return filtered_docs[:self.max_search_results]
     
-    def _extract_source_info(self, documents: List[Dict[str, Any]]) -> List[SourceInfo]:
-        """
-        문서에서 출처 정보 추출
-        
-        Args:
-            documents: 출처 정보를 추출할 문서 리스트
-            
-        Returns:
-            출처 정보 리스트
-        """
-        processed_chunks = set()
-        sources = []
-        
-        for doc in documents:
-            metadata = doc.get("metadata", {})
-            filename = metadata.get("filename", "unknown")
-            similarity_score = doc.get("score", 0.0)  # 키워드 검색은 'score' 필드 사용
-            content = doc.get("text", "")
-            
-            # README 파일 제외
-            if filename.lower() == "readme":
-                continue
-            
-            # 중복 청크 제거
-            content_hash = str(hash(content))
-            unique_key = f"{filename}|{similarity_score}|{content_hash}"
-            
-            if unique_key in processed_chunks:
-                continue
-            
-            processed_chunks.add(unique_key)
-            
-            # Redis에서 원본 출처 정보 찾기
-            try:
-                source_info = asyncio.run(self._find_source_info_from_redis(content))
-            except Exception as e:
-                print(f"Redis 출처 정보 찾기 실패: {e}")
-                source_info = self._create_source_info_from_document(doc)
-            
-            sources.append(source_info)
-            
-            # 최대 5개 출처 정보 제한
-            if len(sources) >= 5:
-                break
-        
-        return sources
-    
-    async def _find_source_info_from_redis(self, chunk_content: str) -> SourceInfo:
-        """
-        Redis에서 원본 출처 정보 찾기
-        
-        Args:
-            chunk_content: 검색된 청크 내용
-            
-        Returns:
-            출처 정보
-        """
-        source_info = SourceInfo(filename="unknown", content="", similarity_score=0.0)
-        
-        try:
-            # Redis에서 모든 문서 가져오기
-            all_docs = await self.redis_document_repository.get_all_document_keys()
-            
-            for key in all_docs:
-                doc = await self.redis_document_repository.get_document(key)
-                if not doc:
-                    continue
-                
-                original_content = doc.get("text", "")
-                
-                # 검색된 청크 내용이 Redis 원본 본문에 포함되어 있는지 확인
-                if chunk_content.strip() in original_content:
-                    metadata = doc.get("metadata", {})
-                    actual_name = metadata.get("filename", "unknown")
-                    
-                    # from_document 메서드를 사용하여 SourceInfo 생성
-                    source_info = SourceInfo.from_document(doc)
-                    source_info.content = chunk_content[:200] + "..." if len(chunk_content) > 200 else chunk_content
-                    return source_info
-        
-        except Exception as e:
-            print(f"Redis 원본 매칭 중 오류 발생: {e}")
-        
-        return source_info
-    
-    def _create_source_info_from_document(self, doc: Dict[str, Any]) -> SourceInfo:
-        """
-        문서에서 출처 정보 생성
-        
-        Args:
-            doc: 문서 데이터
-            
-        Returns:
-            출처 정보
-        """
-        return SourceInfo.from_document(doc)
-    
     def _build_context_with_indices(self, documents: List[Dict[str, Any]]) -> str:
         """
-        참조 번호가 포함된 컨텍스트 생성
+        Create context with reference numbers
         
         Args:
-            documents: 컨텍스트를 생성할 문서 리스트
+            documents: Document list to create context
             
         Returns:
-            생성된 컨텍스트
+            Created context
         """
         context_parts = []
         
@@ -506,17 +409,17 @@ class SearchService:
             filename = metadata.get("filename", "unknown")
             content = doc.get("text", "")
             
-            context_part = f"[{i + 1}] 파일명: {filename}\n내용: {content}\n"
+            context_part = f"[{i + 1}] filename: {filename}\ncontent: {content}\n"
             context_parts.append(context_part)
         
         return "\n".join(context_parts)
     
     async def get_all_documents(self) -> List[Dict[str, Any]]:
         """
-        Redis에 저장된 모든 문서를 조회하는 디버깅 메서드
+        Debug method to retrieve all documents stored in Redis
         
         Returns:
-            모든 문서 리스트
+            All document list
         """
         try:
             all_keys = await self.redis_document_repository.get_all_document_keys()

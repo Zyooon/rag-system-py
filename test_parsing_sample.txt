@@ -1,0 +1,38 @@
+18. memory foam pillow
+- function: pressure relief and neck support
+- genre: bedding accessories
+- washing method: spot clean only, do not machine wash
+- features: 
+  * memory foam core
+  * breathable cover
+  * hypoallergenic materials
+- size: standard (20x26 inches)
+- weight: 2.5 lbs
+- color: white
+- price: $49.99
+
+19. latex pillow
+- function: natural latex support and durability
+- genre: premium bedding
+- washing method: hand wash cold, air dry
+- features:
+  * natural latex core
+  * organic cotton cover
+  * antimicrobial properties
+- size: queen (20x30 inches)
+- weight: 3.2 lbs
+- color: cream
+- price: $89.99
+
+20. down pillow
+- function: soft luxury and adjustable support
+- genre: luxury bedding
+- washing method: dry clean only
+- features:
+  * 95% white down fill
+  * 550 fill power
+  * baffle box construction
+- size: king (20x36 inches)
+- weight: 1.8 lbs
+- color: white
+- price: $129.99
